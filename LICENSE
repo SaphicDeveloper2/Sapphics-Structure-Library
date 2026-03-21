@@ -147,7 +147,7 @@ Copyright (c) 2026 Sapphic. All rights reserved.
    Your rights under this license terminate automatically and without notice if
    You breach any term of Section 3. Upon termination You must cease all use of
    the Proprietary Code and destroy any copies in Your possession. Sections 3,
-   5, 7, and 9 survive termination.
+   5, 7, 10, and 11 survive termination.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -160,7 +160,25 @@ Copyright (c) 2026 Sapphic. All rights reserved.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-10. CONTACT
+10. SUNSET POLICY
+
+    If this project is permanently abandoned — defined as no source commits,
+    no binary releases, and no public communication from Sapphic regarding the
+    project for a continuous period of twenty-four (24) months or more — the
+    full source code of the Software, including all Proprietary Code, will be
+    released publicly on GitHub under the Apache License 2.0. Upon such
+    release, the Apache License 2.0 shall govern all subsequent use of that
+    source code and shall supersede this license in its entirety with respect
+    to the released material.
+
+    This commitment is made in good faith to ensure the community can maintain,
+    port, and build upon the Software for future versions of Minecraft in the
+    event that active development ceases. It does not grant any rights under
+    this license prior to such a release.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+11. CONTACT
 
     To request permissions beyond the scope of this license, contact:
     saphicdeveloper@gmail.com

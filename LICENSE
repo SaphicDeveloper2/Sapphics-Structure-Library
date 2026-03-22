@@ -1,5 +1,5 @@
 SAPPHICS STRUCTURE LIBRARY — PROPRIETARY SOFTWARE LICENSE
-Version 1.0
+Version 1.1
 
 Copyright (c) 2026 Sapphic. All rights reserved.
 
@@ -13,21 +13,17 @@ Copyright (c) 2026 Sapphic. All rights reserved.
 
    "Proprietary Code" means all source code and compiled classes within the
    package com.sapphic.ssl.internal and any sub-packages thereof, including
-   but not limited to: StructureLoaderImpl, BlockUpdateFilter, PaletteCodec,
-   TsaphStructReader, TsaphStructWriter, WorldQueueCache, RegionIndex,
-   TsaphLootEngine, LootRegistry, and any obfuscated equivalents thereof.
+   obfuscated equivalents.
 
    "Public API" means the interfaces, classes, and types within the package
-   com.sapphic.ssl.api and any sub-packages thereof, including but not limited
-   to: IStructureLoader, IStructureExporter, ITsaphLootEngine, StructureQueue,
-   StructureLoaderBridge, StructurePiece, BlockEntry, PendingPlacement,
-   LootTableRef, TsaphLootTable, TsaphLootPool, TsaphLootEntry, LootRange,
-   LootEnchantment, RegionMarker, SaphStructFormat, StructureBoundingBox, and
-   StructureQueue.
+   com.sapphic.ssl.api and any sub-packages thereof.
 
    "Dependent Mod" means any Minecraft mod, plugin, library, or software
    project that calls into the Public API at runtime without reproducing the
-   Software's source code or compiled internals.
+   Software's internal implementation.
+
+   "Modpack" means a collection of mods distributed together for use by end
+   users.
 
    "You" means the individual or legal entity exercising rights under this
    license.
@@ -36,152 +32,112 @@ Copyright (c) 2026 Sapphic. All rights reserved.
 
 2. GRANT OF API USE
 
-   Subject to the terms of this license, Sapphic hereby grants You a
-   worldwide, royalty-free, non-exclusive, non-transferable right to:
+   Subject to the terms of this license, Sapphic grants You a worldwide,
+   royalty-free, non-exclusive, non-transferable right to:
 
-   (a) Include the compiled Software (the .jar file) as a dependency of a
-       Dependent Mod, whether declared at compile time or runtime;
+   (a) Include the unmodified compiled Software (.jar) as a dependency of a
+   Dependent Mod;
 
-   (b) Call, invoke, implement, and interact with the Public API in Your own
-       source code;
+   (b) Call, implement, and interact with the Public API;
 
-   (c) Distribute Your Dependent Mod to end users, provided the Software is
-       either bundled as-is without modification or obtained independently by
-       the end user from an authorised source.
+   (c) Distribute Your Dependent Mod to end users.
 
-   This grant does not convey any ownership interest in the Software.
+   This license does not grant ownership of the Software.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-3. RESTRICTIONS
+3. MODPACK DISTRIBUTION
 
-   The following are strictly prohibited without prior written permission from
-   Sapphic. The Proprietary Code is intentionally obfuscated in all distributed
-   builds. Any attempt to circumvent that obfuscation is itself a violation of
-   this license and may constitute criminal unauthorised access to computer
-   material under the Computer Misuse Act 1990 (UK) and equivalent legislation
-   in other jurisdictions. Violations will be pursued to the fullest extent
-   permitted by law.
+   You may include and redistribute the unmodified compiled Software (.jar)
+   as part of a Modpack, provided that:
 
-   (a) Copying, reproducing, publishing, or distributing the Proprietary Code
-       in source or compiled form, in whole or in part, in any medium — whether
-       the copy was obtained directly, extracted from a distributed .jar, or
-       reconstructed by any means including decompilation or bytecode analysis;
+   (a) The Software is not altered in any way;
 
-   (b) Modifying, adapting, translating, or creating derivative works of the
-       Proprietary Code;
+   (b) All original copyright and attribution notices are retained;
 
-   (c) Reverse engineering, decompiling, disassembling, or otherwise attempting
-       to derive, reconstruct, or approximate the source code of the Proprietary
-       Code, whether by automated tooling, manual inspection of bytecode, or any
-       other means. The Proprietary Code is distributed in obfuscated form
-       deliberately and with the intent that its internal logic remain
-       confidential. Circumventing or defeating that obfuscation by any means is
-       a breach of this license and may constitute a violation of applicable law,
-       including but not limited to the Computer Misuse Act 1990 (UK) and
-       equivalent legislation in other jurisdictions. The sole exception is where
-       applicable law expressly and unconditionally permits such activity and
-       that right cannot lawfully be waived by contract, and only then to the
-       minimum extent required by that law;
-
-   (d) Removing, altering, or obscuring any copyright notice, attribution, or
-       proprietary legend included in or with the Software;
-
-   (e) Sublicensing, selling, renting, leasing, or otherwise transferring
-       rights in or to the Proprietary Code to any third party;
-
-   (f) Incorporating the Proprietary Code into any product or service that
-       replicates or substantially replicates the core functionality of the
-       Software as a standalone structure-loading or loot-generation library
-       for Minecraft mods;
-
-   (g) Distributing a modified version of the compiled Software .jar under the
-       same or a confusingly similar name.
+   (c) The Software is not rebranded or misrepresented.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-4. PUBLIC API CODE
+4. RESTRICTIONS
 
-   Source code that You write solely for the purpose of calling into the Public
-   API — such as interface implementations, API method calls, and type
-   references — remains entirely Your own property and is not subject to any
-   restriction under this license. This license claims no rights over Your
-   Dependent Mod's original code.
+   The following actions are prohibited without prior written permission:
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   (a) Copying or redistributing Proprietary Code in source or modified form;
 
-5. ATTRIBUTION
+   (b) Modifying, adapting, or creating derivative works of the Proprietary
+   Code;
 
-   Any Dependent Mod that uses this Software must include the following notice
-   in at least one of: its README, credits screen, mod description, or
-   accompanying documentation:
+   (c) Reverse engineering, decompiling, or attempting to reconstruct the
+   internal implementation of the Proprietary Code, except where such
+   rights are explicitly granted by applicable law;
 
-       "Uses Sapphics Structure Library by Sapphic."
+   (d) Removing or altering copyright or attribution notices;
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   (e) Redistributing modified versions of the Software under the same or
+   confusingly similar name;
 
-6. FILE FORMATS
-
-   The .tsaphstruct and .tsaphloot file formats are documented in this
-   Software's public documentation. You may read, write, and distribute files
-   in these formats using your own independent implementation, provided that
-   such implementation is written entirely from the public documentation and
-   does not reproduce any Proprietary Code. No royalty or additional
-   permission is required for format-compatible implementations.
+   (f) Using the Proprietary Code itself (not general ideas or concepts) to
+   create a competing library that directly reuses or derives from the
+   Software’s internal implementation.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-7. NO WARRANTY
+5. PUBLIC API CODE
 
-   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-   FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT. IN NO EVENT SHALL
-   SAPPHIC BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN
-   ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN
-   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+   Code written by You that interacts with the Public API remains entirely
+   Your property. This license claims no rights over Your original work.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-8. TERMINATION
+6. ATTRIBUTION
 
-   Your rights under this license terminate automatically and without notice if
-   You breach any term of Section 3. Upon termination You must cease all use of
-   the Proprietary Code and destroy any copies in Your possession. Sections 3,
-   5, 7, 10, and 11 survive termination.
+   Any Dependent Mod or Modpack must include the following notice in a
+   reasonable location (README, mod description, or credits):
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-9. GOVERNING LAW
-
-   This license shall be governed by and construed in accordance with the laws
-   of England and Wales, without regard to its conflict-of-law provisions.
-   Any dispute arising under this license shall be subject to the exclusive
-   jurisdiction of the courts of England and Wales.
+   ```
+   "Uses Sapphics Structure Library by Sapphic."
+   ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-10. SUNSET POLICY
+7. FILE FORMATS
 
-    If this project is permanently abandoned — defined as no source commits,
-    no binary releases, and no public communication from Sapphic regarding the
-    project for a continuous period of twenty-four (24) months or more — the
-    full source code of the Software, including all Proprietary Code, will be
-    released publicly on GitHub under the Apache License 2.0. Upon such
-    release, the Apache License 2.0 shall govern all subsequent use of that
-    source code and shall supersede this license in its entirety with respect
-    to the released material.
-
-    This commitment is made in good faith to ensure the community can maintain,
-    port, and build upon the Software for future versions of Minecraft in the
-    event that active development ceases. It does not grant any rights under
-    this license prior to such a release.
+   The .tsaphstruct and .tsaphloot formats may be freely implemented and used
+   by third parties, provided such implementations are based solely on public
+   documentation and do not copy Proprietary Code.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-11. CONTACT
+8. NO WARRANTY
 
-    To request permissions beyond the scope of this license, contact:
-    saphicdeveloper@gmail.com
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+9. TERMINATION
+
+   This license terminates automatically if You violate its terms. Upon
+   termination, You must cease use of the Software and delete all copies.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+10. GOVERNING LAW
+
+This license is governed by the laws of England and Wales.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+11. SUNSET POLICY
+
+If the Software is abandoned for 24 months (no updates or communication),
+it will be released under the Apache License 2.0.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+12. CONTACT
+
+[saphicdeveloper@gmail.com](mailto:saphicdeveloper@gmail.com)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

@@ -9,126 +9,352 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [The `.tsaphstruct` File Format](#the-tsaphstruct-file-format)
-3. [Placing a Structure](#placing-a-structure)
-4. [The `StructurePlacement` Fluent Builder](#the-structureplacement-fluent-builder)
-5. [Two-Pass Placement System](#two-pass-placement-system)
-6. [Deferred Placement & Chunk Queue](#deferred-placement--chunk-queue)
-7. [Dimension Targeting](#dimension-targeting)
-8. [Datapack Structure Definitions](#datapack-structure-definitions)
-9. [Loot Table System](#loot-table-system)
-10. [Applying Loot to Structure Chests](#applying-loot-to-structure-chests)
-11. [The `TsaphLootBuilder` Fluent Builder](#the-tsaphlootbuilder-fluent-builder)
-12. [The `.tsaphloot` Format Reference](#the-tsaphloot-format-reference)
-13. [Bundled Loot Tables](#bundled-loot-tables)
-14. [API Quick Reference](#api-quick-reference)
+2. [In-Game Tools](#in-game-tools)
+3. [Saving a Single Structure](#saving-a-single-structure)
+4. [Saving a Multi-Structure Bundle](#saving-a-multi-structure-bundle)
+5. [The Connection Point Block](#the-connection-point-block)
+6. [The `/tsaph` Command Reference](#the-tsaph-command-reference)
+7. [The `.tsaphstruct` File Format](#the-tsaphstruct-file-format)
+8. [The `.tsaphmultistruct` File Format](#the-tsaphmultistruct-file-format)
+9. [Placing a Single Structure (Java API)](#placing-a-single-structure-java-api)
+10. [The `StructurePlacement` Fluent Builder](#the-structureplacement-fluent-builder)
+11. [Spawning a Multi-Structure Bundle (Java API)](#spawning-a-multi-structure-bundle-java-api)
+12. [Two-Pass Placement System](#two-pass-placement-system)
+13. [Deferred Placement & Chunk Queue](#deferred-placement--chunk-queue)
+14. [Dimension Targeting](#dimension-targeting)
+15. [Datapack Structure Definitions](#datapack-structure-definitions)
+16. [Datapack Multi-Structure Bundles](#datapack-multi-structure-bundles)
+17. [Loot Table System](#loot-table-system)
+18. [Applying Loot to Structure Chests](#applying-loot-to-structure-chests)
+19. [The `TsaphLootBuilder` Fluent Builder](#the-tsaphlootbuilder-fluent-builder)
+20. [The `.tsaphloot` Format Reference](#the-tsaphloot-format-reference)
+21. [Bundled Loot Tables](#bundled-loot-tables)
+22. [API Quick Reference](#api-quick-reference)
 
 ---
 
 ## Overview
 
-Sapphics Structure Library (SSL) is a high-performance structure engine for Fabric mods. It uses a custom binary format (`.tsaphstruct`) for storing structure data and a purpose-built loot system (`.tsaphloot`) for populating containers inside structures.
+Sapphics Structure Library (SSL) is a high-performance structure engine for Fabric mods. It supports two structure formats:
+
+- **`.tsaphstruct`** — a single structure piece, equivalent to a vanilla structure block save but with no size ceiling, bit-packed storage, and built-in loot references.
+- **`.tsaphmultistruct`** — a bundle of named, tagged pieces with weights and connection points, consumed by the procedural engine to generate randomised dungeons, villages, and multi-part mega-structures.
 
 Key design goals:
 
-- **No size ceiling.** Unlike vanilla's 48³ limit, `.tsaphstruct` supports arbitrarily large structures.
-- **Chunk-safe placement.** Blocks in unloaded chunks are queued to disk and applied automatically when the chunk loads, even across server restarts.
-- **Efficient updates.** A two-pass system ensures fences connect, fluids flow, and redstone resolves correctly — without running neighbour-update calls on every block.
-- **Flexible loot.** Containers can use vanilla loot tables or fully custom `.tsaphloot` tables with weighted pools, random counts, and random enchantments.
-- **Datapack-driven generation.** Structures can be registered for automatic world generation entirely through datapacks — no Java code required.
+- **No size ceiling.** Both formats support structures far beyond vanilla's 48³ limit.
+- **Chunk-safe placement.** Blocks in unloaded chunks are queued to disk and applied when the chunk loads, including across server restarts.
+- **Efficient updates.** A two-pass system ensures fences connect, fluids flow, and redstone resolves correctly without touching every block.
+- **Flexible loot.** Containers use vanilla loot tables or custom `.tsaphloot` tables, baked into the file at export time.
+- **Datapack-driven generation.** Both formats can be loaded from datapacks with no Java code required.
+- **Fully obfuscated internals.** Only the `com.sapphic.ssl.api` package is public; everything else is obfuscated in production builds.
+
+---
+
+## In-Game Tools
+
+Two items are available in the **Structure Library** creative tab:
+
+### Structure Wand
+Used to select rectangular regions for export. Renders as a vanilla stick.
+
+- **Right-click a block** → Set Position 1 (first corner)
+- **Sneak + Right-click a block** → Set Position 2 (second corner)
+
+Once both corners are set, the wand displays the selection's dimensions and volume in chat, including a warning if it exceeds the vanilla 48³ limit. There is no such limit in SSL — the warning is purely informational.
+
+### Connection Point Block
+A directional full block used to mark the open ends of a multi-structure piece. The block faces the direction the player is looking when placed (opposite of player facing). Place it at every opening of a hallway, path, or room that should connect to an adjacent piece.
+
+Connection point blocks are **automatically removed** at generation time and replaced with the floor block beneath them, so they never appear in the final world.
+
+---
+
+## Saving a Single Structure
+
+**Step 1 — Select the region**
+
+Use the **Structure Wand** to right-click two opposite corners of your build. The entire build must be within loaded chunks.
+
+**Step 2 — Export**
+
+```
+/tsaph save <name>
+```
+
+The file is saved to `<worldSave>/generated/ssl/<name>.tsaphstruct`. The `.tsaphstruct` extension is appended automatically if omitted.
+
+**Step 3 — Load it back**
+
+```
+/tsaph load <name> <x> <y> <z>
+```
+
+The structure is placed with its `(minX, minY, minZ)` corner at `(x, y, z)`. Blocks in unloaded chunks are deferred automatically.
+
+**Tip — avoiding floating structures**
+
+If your selection box captured empty air rows below the actual ground level of your build, use the `groundOffset()` helper when placing via the Java API so the first real block lands at the intended world Y. See [The `StructurePlacement` Fluent Builder](#the-structureplacement-fluent-builder).
+
+---
+
+## Saving a Multi-Structure Bundle
+
+A multi-structure bundle (`bundle`) groups several independently-selected pieces into a single `.tsaphmultistruct` file. The procedural engine then chains them together at generation time using each piece's connection points.
+
+### Full workflow
+
+**Step 1 — Begin a session**
+
+```
+/tsaph multi begin
+```
+
+This starts a building session. Any previous session is discarded.
+
+**Step 2 — Build a piece in the world**
+
+Build or place one of your structure pieces (a house, a corridor segment, a T-junction, etc.) somewhere in the world. Place **Connection Point blocks** at every opening where another piece should attach, facing outward.
+
+**Step 3 — Select the piece with the wand**
+
+Use the Structure Wand to select the piece's bounding box, including its connection point blocks.
+
+**Step 4 — Tag and add the piece**
+
+```
+/tsaph multi add <name> <role> [connection_type] [weight] [max_count]
+```
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `name` | Yes | A readable label for this piece, e.g. `house_a` or `t_junction`. |
+| `role` | Yes | `ROOM`, `HALLWAY`, or `PATH`. If you type an invalid role, clickable buttons appear in chat to select the correct one — the piece name is preserved. |
+| `connection_type` | No | The junction shape (see table below). Ignored for `ROOM`. If invalid, clickable buttons appear with the full command pre-filled. |
+| `weight` | No | Relative spawn probability (default 1). Higher = more common. |
+| `max_count` | No | Maximum number of times this piece may appear in one generation (default -1 = unlimited). |
+
+**Roles:**
+
+| Role | Purpose |
+|------|---------|
+| `ROOM` | Terminal node — a house, chamber, plaza, or dungeon boss room. Caps open connector ends. No connection type needed. |
+| `HALLWAY` | Underground connector — a corridor, tunnel, or cave passage. Requires a connection type. Used preferentially in Nether/End dimensions. |
+| `PATH` | Surface connector — a dirt road, paved street, or bridge. Requires a connection type. Used preferentially in Overworld. |
+
+**Connection types** (for HALLWAY and PATH pieces):
+
+| Type | Shape | Open ends |
+|------|-------|-----------|
+| `STRAIGHT` | ━━ | Forward + back |
+| `T_SHAPE` | ┤ | Forward + left + right |
+| `T_INVERTED` | ├ | Back + back-left + back-right |
+| `CORNER_LEFT` | ┘ | Forward + left |
+| `CORNER_RIGHT` | └ | Forward + right |
+| `CORNER_LEFT_INVERTED` | ┐ | Back + left |
+| `CORNER_RIGHT_INVERTED` | ┌ | Back + right |
+| `MIDSECTION_BRANCH` | ┣ | Forward + back + right (asymmetric detour) |
+
+The connection type you declare must match the number and direction of connection point blocks you placed. The engine uses the actual blocks for snapping — the type field is metadata for the companion JSON.
+
+**Step 5 — Repeat for each piece**
+
+Clear your wand selection, build (or locate) the next piece, select it, and run `/tsaph multi add` again. Repeat until all piece types are tagged.
+
+**Step 6 — Save the bundle**
+
+```
+/tsaph multi save <bundle_name>
+```
+
+Two files are written to `<worldSave>/generated/ssl/`:
+
+- `<bundle_name>.tsaphmultistruct` — binary bundle (all pieces embedded)
+- `<bundle_name>.tsaphmultistruct.json` — companion config (edit weights and max counts here without reopening the game)
+
+**Step 7 — Generate a structure**
+
+```
+/tsaph multi spawn <bundle_name> <x> <z> [depth]
+```
+
+The engine seeds a random ROOM piece at `(x, z)`, then chains connectors outward from each connection point, capping open ends with ROOM pieces. `depth` controls how many connector chains can be chained before forced capping (default 6).
+
+### Reviewing and managing sessions
+
+```
+/tsaph multi info     — Show all pieces added so far with name, role, type, weight
+/tsaph multi cancel   — Discard the current session
+/tsaph multi list     — List all saved .tsaphmultistruct bundles
+/tsaph multi reload   — Reload all bundles from disk
+```
+
+### Editing the companion JSON
+
+After saving, open `<bundle_name>.tsaphmultistruct.json` in any text editor. Adjust `weight` and `max_count` freely. Do not change `id` or `role` — those are structural. Run `/tsaph multi reload` to apply changes without restarting.
+
+```json
+{
+  "name": "my_village",
+  "pieces": [
+    { "id": "...", "name": "house_a",    "role": "ROOM",    "connection_type": "NONE",     "weight": 10, "max_count": -1,  "connection_points": 4 },
+    { "id": "...", "name": "road_cross", "role": "PATH",    "connection_type": "T_SHAPE",  "weight": 5,  "max_count": 3,   "connection_points": 3 },
+    { "id": "...", "name": "road_end",   "role": "PATH",    "connection_type": "STRAIGHT", "weight": 8,  "max_count": -1,  "connection_points": 2 }
+  ]
+}
+```
+
+---
+
+## The Connection Point Block
+
+The **Connection Point** block (`sapphics-structure-library:connector_block`) is a directional full block placed inside a structure piece to mark where adjacent pieces will attach.
+
+**Placement rules:**
+- Place one connection point block at each opening of a connector piece facing **outward** (away from the interior of the piece).
+- The block faces the direction opposite to the player's look direction when placed — so stand inside the opening looking outward and right-click to place correctly.
+- ROOM pieces can have any number of connection points (one per doorway/entrance).
+- HALLWAY and PATH pieces must have connection points whose directions match the declared connection type.
+
+**How the engine uses them:**
+
+When chaining pieces, the engine looks for a connector piece whose connection points include one facing the **opposite** of the open end's direction (i.e. it has an "entry" facing inward). The piece is then snapped so that entry point aligns exactly with the open end. All other connection points on the newly placed connector become new open ends for the next chaining round.
+
+After placement, every connection point block is replaced with the floor block directly beneath it. If there is no floor block, it is replaced with air.
+
+---
+
+## The `/tsaph` Command Reference
+
+All commands require operator permission level 2.
+
+### Single structure
+
+| Command | Description |
+|---------|-------------|
+| `/tsaph save <name>` | Export wand selection → `generated/ssl/<name>.tsaphstruct` |
+| `/tsaph load <name> <x> <y> <z>` | Load and place at origin (x, y, z) |
+| `/tsaph info` | Show current wand selection dimensions |
+| `/tsaph list` | List all `.tsaphstruct` files in `generated/ssl/` |
+| `/tsaph queue` | Show deferred block count for the current world |
+
+### Multi-structure
+
+| Command | Description |
+|---------|-------------|
+| `/tsaph multi begin` | Start a new bundle-building session |
+| `/tsaph multi add <name> <role> [ctype] [weight] [max]` | Tag the current wand selection and add it to the session |
+| `/tsaph multi save <name>` | Finish and write the bundle to disk |
+| `/tsaph multi cancel` | Discard the current session |
+| `/tsaph multi info` | List all pieces in the current session |
+| `/tsaph multi list` | List all saved `.tsaphmultistruct` bundles |
+| `/tsaph multi reload` | Reload all bundles from disk (picks up companion JSON changes) |
+| `/tsaph multi spawn <name> <x> <z> [depth]` | Generate a structure from the named bundle at (x, z) |
+
+### Loot
+
+| Command | Description |
+|---------|-------------|
+| `/tsaph loot apply tsaphloot <name> <pos>` | Stamp a TsaphLoot table onto the container at `pos` (fills on first open) |
+| `/tsaph loot apply vanilla <id> <pos>` | Stamp a vanilla loot table onto the container |
+| `/tsaph loot fill tsaphloot <name> <pos>` | Immediately populate a container with TsaphLoot |
+| `/tsaph loot fill vanilla <id> <pos>` | Immediately populate a container with a vanilla loot table |
+| `/tsaph loot list` | List all loaded TsaphLoot tables |
+| `/tsaph loot reload` | Reload all `.tsaphloot` files from disk |
 
 ---
 
 ## The `.tsaphstruct` File Format
 
-Structure files use the extension `.tsaphstruct` and a proprietary binary layout. The current version is **v2**.
-
-### Binary Layout
+Structure files use a proprietary binary layout. The current version is **v2**.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │  HEADER  (29 bytes fixed)                               │
 │    [4]  Magic          0x54534150  ("TSAP")             │
 │    [1]  Version        0x02                             │
-│    [4]  SizeX          int  (no 48-block ceiling)       │
-│    [4]  SizeY          int                              │
-│    [4]  SizeZ          int                              │
-│    [4]  PaletteSize    int                              │
+│    [4]  SizeX / Y / Z  int                              │
+│    [4]  PaletteSize    int  (max 65,535)                 │
 │    [4]  RegionCount    int                              │
-│    [4]  EntityCount    int  (block entity records)      │
-│    [4]  LootRefCount   int  (added in v2)               │
+│    [4]  EntityCount    int  (block entities)            │
+│    [4]  LootRefCount   int  (v2 only)                   │
 ├─────────────────────────────────────────────────────────┤
-│  PALETTE  (PaletteSize entries)                         │
-│    [2]  String length  short (unsigned)                 │
-│    [N]  BlockState id  UTF-8                            │
+│  PALETTE  — [short len][UTF-8 blockstate id] per entry  │
 ├─────────────────────────────────────────────────────────┤
-│  REGION INDEX  (RegionCount × 20 bytes)                 │
-│    [4]  RegionX        int  (blockX / 512)              │
-│    [4]  RegionZ        int  (blockZ / 512)              │
-│    [8]  DataOffset     long                             │
-│    [4]  DataLength     int                              │
+│  REGION INDEX  — 20 bytes per region (512×512 stride)   │
 ├─────────────────────────────────────────────────────────┤
-│  BLOCK DATA                                             │
-│    Bit-packed palette indices (minimum bits per block)  │
-│    Sub-header: [int bits][int longs][int blockCount]    │
+│  BLOCK DATA  — bit-packed palette indices               │
+│    sub-header: [int bits][int longs][int count]         │
 ├─────────────────────────────────────────────────────────┤
-│  BLOCK-ENTITY DATA  (EntityCount entries)               │
-│    [4]  rx / ry / rz   int (local space)                │
-│    [2]  TypeLen        short (unsigned)                 │
-│    [N]  TypeId         UTF-8                            │
-│    [4]  NbtLen         int                              │
-│    [N]  NbtBytes       GZIP-compressed NbtCompound      │
+│  BLOCK-ENTITY DATA  — GZIP-compressed NBT per entity    │
 ├─────────────────────────────────────────────────────────┤
-│  LOOT REFS  (LootRefCount entries)   ← v2 only         │
-│    [4]  LinearIndex  int  ((ry*sZ+rz)*sX+rx)           │
-│    [1]  RefType      byte  0x00=VANILLA 0x01=TSAPHLOOT  │
-│    [2]  IdLen        short (unsigned)                   │
-│    [N]  Id           UTF-8                              │
+│  LOOT REFS  (v2 only)                                   │
+│    [int linearIndex][byte refType][short idLen][UTF-8]  │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### Palette
+Block states are stored as full property strings, e.g. `minecraft:oak_stairs[facing=north,half=bottom,shape=straight]`. Palette indices are bit-packed at the minimum bits-per-block needed for the palette size, identical to Minecraft's internal `BitStorage`.
 
-Every distinct block state in the structure is assigned a compact integer index. The palette can hold up to **65,535 entries**. Block states are stored as full strings including all properties, e.g.:
+### Version compatibility
 
-```
-minecraft:stone
-minecraft:oak_stairs[facing=north,half=bottom,shape=straight]
-minecraft:chest[facing=west,type=single,waterlogged=false]
-```
-
-### Block Data (Bit Packing)
-
-Palette indices are stored using the **minimum number of bits** required to represent the palette size. A structure that only uses 2 block states needs 1 bit per block; one with 256 states needs 8 bits. Values are written LSB-first and span 64-bit long boundaries. This is equivalent to Minecraft's internal `BitStorage` format.
-
-### Region Index
-
-The region index is a spatial partitioning layer that lets the loader skip sections of the block data immediately without scanning every block. Each region covers a **512 × 512 block column** (32 × 32 chunks). If a structure has empty regions, their `DataLength` is 0 and the loader exits that region immediately with no per-block work.
-
-### Version Compatibility
-
-| Version | Description |
-|---------|-------------|
-| v1 | No loot ref section. `LootRefCount` is treated as 0. |
-| v2 | Adds `LootRefCount` and the LOOT REFS section. |
+| Version | Notes |
+|---------|-------|
+| v1 | No loot refs section. `LootRefCount` treated as 0. |
+| v2 | Adds the LOOT REFS section. |
 
 ---
 
-## Placing a Structure
+## The `.tsaphmultistruct` File Format
 
-### Raw API
+Multi-structure bundles embed multiple complete `.tsaphstruct` v2 payloads alongside per-piece metadata.
 
-All placement is routed through `StructureLoaderBridge`, the only public entry point into the obfuscated internal implementation.
+```
+┌─────────────────────────────────────────────────────────┐
+│  HEADER                                                 │
+│    [4]  Magic          0x54534D53  ("TSMS")             │
+│    [1]  Version        0x02                             │
+│    [short+UTF]  Bundle name                             │
+│    [4]  PieceCount     int                              │
+├─────────────────────────────────────────────────────────┤
+│  PIECE RECORDS  (PieceCount entries)                    │
+│    [short+UTF]  id      (UUID string)                   │
+│    [short+UTF]  name    (human-readable label)          │
+│    [1]  role            (0=ROOM 1=HALLWAY 2=PATH)       │
+│    [1]  connectionType  (0–8, see ConnectionType enum)  │
+│    [4]  weight          int                             │
+│    [4]  maxCount        int  (-1 = unlimited)           │
+│  v2: connection points before struct data               │
+│    [4]  connPtCount     int                             │
+│    per point: [4 rx][4 ry][4 rz][1 facing]             │
+│    [4]  dataLen         int                             │
+│    [N]  data            .tsaphstruct v2 binary          │
+└─────────────────────────────────────────────────────────┘
+```
+
+The embedded structure data for each piece is a complete, self-contained `.tsaphstruct` v2 binary, giving multi-structs full support for large structures, block-entity NBT, and loot refs.
+
+### Version compatibility
+
+| Version | Notes |
+|---------|-------|
+| v1 | No connection points section. `connPtCount` treated as 0. |
+| v2 | Adds per-piece connection point records. |
+
+A companion `<name>.tsaphmultistruct.json` is always written alongside the binary when saving in-game. It is optional — the binary is self-contained and can be loaded without it.
+
+---
+
+## Placing a Single Structure (Java API)
 
 ```java
 IStructureLoader loader = StructureLoaderBridge.getLoader();
-StructurePiece piece = loader.load(Path.of("path/to/yourstructure.tsaphstruct"));
+StructurePiece   piece  = loader.load(Path.of("path/to/structure.tsaphstruct"));
 loader.place(serverWorld, piece, origin);
 ```
 
-`origin` is the world-space position of the structure's `(minX, minY, minZ)` corner. The `place` call is synchronous and safe to call from the server thread. Blocks in unloaded chunks are automatically deferred.
+`origin` is the world-space `(minX, minY, minZ)` corner. Blocks in unloaded chunks are deferred automatically. The `place` call is safe to invoke from the server thread.
 
-### Loading from Mod Resources
+### Loading from mod resources
 
 ```java
 Path structFile = FabricLoader.getInstance()
@@ -137,102 +363,118 @@ Path structFile = FabricLoader.getInstance()
 StructurePiece piece = loader.load(structFile);
 ```
 
-### Ground Offset
-
-When the export selection box captured empty air rows below the actual structure, local Y=0 is air and the first real blocks appear higher up. Placing at a world Y without accounting for this causes structures to float.
-
-`StructurePiece.groundOffset()` returns the local Y of the first non-air layer:
+### Ground offset
 
 ```java
-// Correct manual placement flush with ground at Y=64
+// Avoid floating: subtract the piece's first non-air layer from target Y
 BlockPos origin = new BlockPos(x, 64 - piece.groundOffset(), z);
 loader.place(world, piece, origin);
 ```
-
-The `StructurePlacement` builder applies this automatically.
 
 ---
 
 ## The `StructurePlacement` Fluent Builder
 
-`StructurePlacement` replaces the manual three-step pattern with a chainable builder that handles surface lookup, ground offset correction, and centering automatically.
+`StructurePlacement` is the recommended way to place single structures. It handles surface lookup, ground offset correction, and centering automatically.
 
 ```java
-// Surface placement — looks up WORLD_SURFACE heightmap, applies ground offset
+// Surface placement — centred on X/Z, flush with terrain
 StructurePlacement.load(path)
-    .at(x, z)           // centres the structure on this X/Z
+    .at(x, z)
     .onSurface()
     .place(world);
 
 // Ocean floor placement
-StructurePlacement.of(piece)
-    .at(x, z)
-    .onOceanFloor()
-    .place(world);
+StructurePlacement.of(piece).at(x, z).onOceanFloor().place(world);
 
-// Absolute Y — ground offset still applied unless disabled
-StructurePlacement.of(piece)
-    .atCorner(x, z)     // pins exact (minX, minZ) corner instead of centering
-    .atY(64)
-    .place(world);
-
-// Bury 3 blocks underground
-StructurePlacement.of(piece)
-    .at(x, z)
-    .onSurface()
-    .withYOffset(-3)
-    .place(world);
-
-// Disable automatic ground offset correction entirely
+// Absolute Y, corner-pinned, 3 blocks underground
 StructurePlacement.of(piece)
     .atCorner(x, z)
     .atY(64)
-    .withoutGroundOffset()
+    .withYOffset(-3)
     .place(world);
-```
 
-### Method Reference
+// Disable automatic ground offset correction
+StructurePlacement.of(piece).atCorner(x, z).atY(64).withoutGroundOffset().place(world);
+```
 
 | Method | Description |
 |--------|-------------|
-| `StructurePlacement.load(path)` | Load a `.tsaphstruct` file and begin building |
-| `StructurePlacement.of(piece)` | Begin building from an already-loaded `StructurePiece` |
-| `.at(x, z)` | Centre the structure on this world X/Z |
-| `.atCorner(x, z)` | Pin the exact (minX, minZ) corner — no centering |
-| `.onSurface()` | Use the `WORLD_SURFACE` heightmap |
-| `.onOceanFloor()` | Use the `OCEAN_FLOOR` heightmap |
-| `.atY(y)` | Use a literal world Y coordinate |
-| `.withYOffset(n)` | Add `n` blocks on top of any computed Y (negative = buried) |
-| `.withoutGroundOffset()` | Disable automatic `groundOffset()` correction |
+| `StructurePlacement.load(path)` | Load from file and begin |
+| `StructurePlacement.of(piece)` | Begin from an already-loaded piece |
+| `.at(x, z)` | Centre the structure on this X/Z |
+| `.atCorner(x, z)` | Pin the exact (minX, minZ) corner |
+| `.onSurface()` | Use `WORLD_SURFACE` heightmap |
+| `.onOceanFloor()` | Use `OCEAN_FLOOR` heightmap |
+| `.atY(y)` | Use a literal world Y |
+| `.withYOffset(n)` | Add `n` to the computed Y (negative = buried) |
+| `.withoutGroundOffset()` | Skip automatic `groundOffset()` correction |
 | `.place(world)` | Execute the placement |
+
+---
+
+## Spawning a Multi-Structure Bundle (Java API)
+
+```java
+// Load from disk
+MultiStructBundle bundle = StructureLoaderBridge.loadMultiStruct(path);
+
+// Or retrieve from the registry (populated by datapacks and /tsaph multi reload)
+Optional<MultiStructBundle> bundle = MultiStructRegistry.get("my_village");
+
+// Generate
+StructureLoaderBridge.spawnMultiStruct(world, bundle, x, z,
+        ProceduralEngine.DEFAULT_MAX_DEPTH);
+```
+
+The engine selects a random ROOM piece as the seed, places it at (x, z), then chains connector pieces (PATH for surface worlds, HALLWAY for Nether/End) outward from each connection point until `maxDepth` is reached or no eligible connectors remain. All open ends are capped with ROOM pieces.
+
+**Session management from code:**
+
+```java
+UUID playerUuid = player.getUuid();
+
+// Start a session
+WandSession session = StructureLoaderBridge.beginSession(playerUuid);
+
+// Add a piece (with pre-decoded StructurePiece)
+// Connection points are extracted from connector blocks automatically
+session.addPiece("house_a", PieceRole.ROOM, ConnectionType.NONE, 10, -1, piece);
+
+// Build the bundle
+MultiStructBundle bundle = session.build("my_village");
+
+// End the session
+StructureLoaderBridge.endSession(playerUuid);
+```
 
 ---
 
 ## Two-Pass Placement System
 
-### Pass 1 — Bulk FORCE_STATE Placement
+### Pass 1 — Bulk `FORCE_STATE` placement
 
-Every non-air block is placed using `Block.FORCE_STATE`, suppressing all neighbour update notifications. Air variants (`minecraft:air`, `minecraft:cave_air`, `minecraft:void_air`) are skipped silently.
+Every non-air block is placed with `Block.FORCE_STATE | 2` — suppressing all neighbour update notifications but still dispatching network update packets to tracking clients (preventing ghost blocks). Air variants are skipped silently.
 
-Each placed block is tested by `BlockUpdateFilter.needsUpdate`. Blocks that pass are added to a `sensitiveList` for Pass 2. Solid featureless blocks — stone, dirt, logs, glass, wool — are never touched in Pass 2.
+Each placed block is tested by `BlockUpdateFilter.needsUpdate`. Blocks that pass are queued for Pass 2. Solid featureless blocks (stone, dirt, logs, glass, wool) are never touched in Pass 2.
 
-### Pass 2 — Targeted Neighbour Update Sweep
+### Pass 2 — Targeted neighbour update sweep
 
-For each position in `sensitiveList`:
+For each position in the sensitive list:
 
-- **All 6 face-adjacent chunks loaded** → `getStateForNeighborUpdate` is called for each face direction. Any resulting state change is written back with `Block.NOTIFY_ALL`. Fluid ticks are scheduled for any block carrying a non-empty `FluidState`.
-- **Any adjacent chunk unloaded** → the position is enqueued as an `updateOnly` entry in the persistent `StructureQueue` and fires when the last unloaded adjacent chunk loads.
+- **All 6 face-adjacent chunks loaded** → `getStateForNeighborUpdate` is called for each face. Any resulting state change is written back with `Block.NOTIFY_ALL`. Fluid ticks are scheduled for waterlogged or source blocks.
+- **Any adjacent chunk unloaded** → the position is enqueued as an `updateOnly` entry in the persistent `StructureQueue` and fires when the last adjacent chunk loads.
 
-### What BlockUpdateFilter Covers
+### What gets updated
 
 | Category | Examples |
 |----------|---------|
-| Fluid-carrying | Any waterlogged block, direct water/lava |
-| Directionally-connected | Fences, walls, glass panes, iron bars, vines, chorus plants |
+| Fluid-carrying | Waterlogged blocks, direct water/lava |
+| Directionally-connected | Fences, walls, glass panes, iron bars, vines |
 | Shape-computed | Stairs, rails, leaves |
-| Power / redstone | Redstone wire, buttons, pressure plates, observers, target blocks |
-| Interaction-state | Doors, trapdoors, fence gates, dispensers, tripwire hooks |
-| Attachment-facing | Wall torches, wall lanterns, bells, wall signs, banners, buttons, levers |
+| Power / redstone | Redstone wire, buttons, pressure plates, observers |
+| Interaction-state | Doors, trapdoors, fence gates, dispensers, tripwire |
+| Attachment-facing | Wall torches, wall lanterns, bells, wall signs, banners |
 | Gravity | Sand, gravel, concrete powder, anvils |
 | Crop / fluid class | `CropBlock`, `FluidBlock`, `FallingBlock` |
 
@@ -240,110 +482,65 @@ For each position in `sensitiveList`:
 
 ## Deferred Placement & Chunk Queue
 
-### How It Works
+When Pass 1 encounters a block whose chunk is not loaded, a `PendingPlacement` is added to the world's `StructureQueue`, bucket-indexed by `ChunkPos.toLong()` for O(1) lookup.
 
-When Pass 1 encounters a block whose chunk is not loaded, a `PendingPlacement` record is added to the world's `StructureQueue`, bucket-indexed by `ChunkPos.toLong()` for O(1) lookup.
+The queue is drained by two hooks:
 
-The queue is drained in two places:
+- **`ChunkGeneratorMixin`** — fires after `generateFeatures` for freshly-generated chunks.
+- **`ServerChunkEvents.CHUNK_LOAD`** — fires for every chunk load, including from disk on server restart. This is what makes deferred placements resolve after a world reload without requiring chunk regeneration.
 
-- **`ChunkGeneratorMixin`** — fires after `generateFeatures` completes for freshly-generated chunks.
-- **`ServerChunkEvents.CHUNK_LOAD`** — fires every time any chunk becomes accessible, including chunks loaded from disk on server restart. This ensures deferred placements resolve correctly after a reload without requiring the chunk to regenerate.
+Both hooks drain the target chunk and all 8 surrounding chunks, allowing deferred `updateOnly` entries on chunk borders to fire as soon as all their neighbours are loaded.
 
-Both hooks drain the queue for the loaded chunk **plus all 8 surrounding chunks**, allowing `updateOnly` entries on chunk borders to fire once all their neighbours are present.
-
-### Persistence Across Restarts
-
-The queue is saved to disk when blocks are deferred and on server stop. Format is per-world, per-dimension:
+### On-disk queue location
 
 ```
-<worldSave>/data/ssl_queue/<sanitised-dimension-key>/pending.bin
+<worldSave>/data/ssl_queue/<dimension>/pending.bin
 ```
 
 Examples:
 ```
-saves/MyWorld/data/ssl_queue/minecraft_overworld/pending.bin
-saves/MyWorld/data/ssl_queue/minecraft_the_nether/pending.bin
-saves/MyWorld/data/ssl_queue/yourmod_yourdimension/pending.bin
+saved/MyWorld/data/ssl_queue/minecraft_overworld/pending.bin
+saved/MyWorld/data/ssl_queue/minecraft_the_nether/pending.bin
+saved/MyWorld/data/ssl_queue/yourmod_yourdimension/pending.bin
 ```
 
-### Queue File Format (v2)
-
-```
-[byte]  version = 2
-[UTF]   worldKey  (e.g. "minecraft:overworld")
-[int]   entry count
-[entry × count]
-```
-
-Each entry:
-```
-[boolean]  pendingUpdate flag
-[int]      x, y, z
---- if !pendingUpdate ---
-[UTF]      blockStateId
-[boolean]  hasNbt
-[int?]     nbtLength
-[bytes?]   nbtBytes (GZIP-compressed)
-[boolean]  hasLoot
-[byte?]    lootType (0x00=VANILLA, 0x01=TSAPHLOOT)
-[short?]   lootIdLength
-[bytes?]   lootId (UTF-8)
-```
-
-The `worldKey` is written once in the file header. Legacy v1 files (key per-entry, no version byte) are detected and loaded transparently.
+The queue file version is 2. The dimension key is written once in the header. Legacy v1 files (key per-entry) are loaded transparently.
 
 ---
 
 ## Dimension Targeting
 
-SSL is dimension-agnostic. `loader.place(world, piece, origin)` and `StructurePlacement` both accept any `ServerWorld`, including custom dimensions.
+SSL is dimension-agnostic. Any `ServerWorld` is accepted:
 
 ```java
-// Overworld
 loader.place(server.getWorld(World.OVERWORLD), piece, origin);
+loader.place(server.getWorld(World.NETHER),    piece, origin);
 
-// Nether
-loader.place(server.getWorld(World.NETHER), piece, origin);
-
-// Custom dimension
 RegistryKey<World> myDim = RegistryKey.of(RegistryKeys.WORLD,
     Identifier.of("yourmod", "yourdimension"));
-ServerWorld myWorld = server.getWorld(myDim);
-if (myWorld != null) loader.place(myWorld, piece, origin);
+if (server.getWorld(myDim) != null)
+    loader.place(server.getWorld(myDim), piece, origin);
 ```
 
-Deferred queues are stored per-dimension on disk so placements always resolve in the correct world.
+The procedural engine also uses the dimension key to choose between PATH (surface) and HALLWAY (Nether/End) connectors automatically.
 
 ---
 
 ## Datapack Structure Definitions
 
-Structures can be registered for automatic world generation entirely through datapacks. No Java code is required.
+Single structures can be registered for automatic world generation via datapacks — no Java code required.
 
-### File Layout
-
-Place two files in your datapack per structure — the definition JSON and the structure file, with matching stems:
+### File layout
 
 ```
 data/
 └── <namespace>/
     └── ssl_structures/
         ├── myvillage.json           ← placement definition
-        └── myvillage.tsaphstruct    ← the structure (same stem)
+        └── myvillage.tsaphstruct    ← structure file (same stem)
 ```
 
-Loot tables can also be shipped alongside structures in a datapack:
-
-```
-data/
-└── <namespace>/
-    └── ssl_loot/
-        └── my_custom_chest.tsaphloot
-```
-
-Both are loaded automatically on server start and `/reload` via Fabric's resource reload system.
-
-### Definition Schema
+### Definition schema
 
 ```json
 {
@@ -358,251 +555,53 @@ Both are loaded automatically on server start and `/reload` via Fabric's resourc
 
 | Field | Default | Description |
 |-------|---------|-------------|
-| `dimension` | `"minecraft:overworld"` | Target dimension registry key. Use `"*"` to allow any dimension. |
-| `biomes` | all biomes | Biome registry key whitelist. Empty array = no restriction. |
-| `y_placement` | `"surface"` | One of `"surface"`, `"ocean_floor"`, or `"absolute"`. |
-| `y_offset` | `0` | Integer offset added on top of the computed Y. Negative values bury the structure. In `"absolute"` mode this is the literal world Y. |
-| `frequency` | `0.005` | Per-chunk generation probability, `0.0`–`1.0`. |
-| `salt` | `0` | Per-definition seed modifier. Ensures different structures don't always co-generate in the same chunks. |
+| `dimension` | `"minecraft:overworld"` | Target dimension. Use `"*"` for any. |
+| `biomes` | all biomes | Whitelist of biome registry keys. Empty = no restriction. |
+| `y_placement` | `"surface"` | `"surface"`, `"ocean_floor"`, or `"absolute"` |
+| `y_offset` | `0` | Added to computed Y. Negative buries the structure. In `"absolute"` mode, this is the literal world Y. |
+| `frequency` | `0.005` | Per-chunk probability, 0.0–1.0. |
+| `salt` | `0` | Per-definition seed modifier — prevents all definitions generating in the same chunks. |
 
-### Y Placement Modes
+Definitions and their `.tsaphstruct` files are reloaded on server start and `/reload`.
 
-| Value | Behaviour |
-|-------|-----------|
-| `"surface"` | Looks up the `WORLD_SURFACE` heightmap at the chunk centre. `groundOffset()` is applied automatically. |
-| `"ocean_floor"` | Looks up the `OCEAN_FLOOR` heightmap. Use for underwater ruins. |
-| `"absolute"` | Uses `y_offset` as the literal world Y. No heightmap lookup. |
+---
 
-### Accessing Definitions from Code
+## Datapack Multi-Structure Bundles
 
-```java
-List<StructureDefinition> defs = StructureLoaderBridge.definitions();
+Multi-structure bundles can also be shipped in datapacks:
+
+```
+data/
+└── <namespace>/
+    └── ssl_multistructs/
+        └── mybundle.tsaphmultistruct
+```
+
+Bundles in `ssl_multistructs/` are loaded into `MultiStructRegistry` on every datapack reload. A companion JSON is not supported for datapack bundles — weights and counts are fixed in the binary. Generate them in-game with `/tsaph multi spawn` or from code via `StructureLoaderBridge.spawnMultiStruct`.
+
+Loot tables can also be shipped in datapacks:
+
+```
+data/<namespace>/ssl_loot/<name>.tsaphloot
 ```
 
 ---
 
 ## Loot Table System
 
-Structure containers (chests, barrels, shulker boxes) can be assigned loot. Two backends are supported and can be mixed freely across containers in the same structure.
+Structure containers can be assigned loot. Two backends are supported and can be mixed freely:
 
-### Vanilla Loot Tables
+### Vanilla loot tables
 
-References any standard Minecraft or datapack loot table by its full registry key. The engine writes `LootTable` and `LootTableSeed` NBT tags onto the container's block entity. Minecraft populates the container on first player open.
+References any Minecraft or datapack loot table by its full registry key. The container fills itself on first player open.
 
 ```java
 LootTableRef.vanilla("minecraft:chests/simple_dungeon")
-LootTableRef.vanilla("minecraft:chests/end_city_treasure")
 ```
 
-### TsaphLoot Tables
+### TsaphLoot tables
 
-The `.tsaphloot` system is SSL's own pool-based loot engine. A synthetic key (`ssl:tsaphloot/<n>`) is written onto the container and intercepted by `LootableContainerMixin` on first open.
-
-Tables are resolved in this order, with later sources overriding earlier ones on name collision:
-
-1. **Bundled** — shipped inside the SSL mod jar
-2. **Datapack** — `data/<namespace>/ssl_loot/*.tsaphloot` in any loaded datapack
-3. **World-specific** — `<worldSave>/data/ssl_loot/*.tsaphloot`
-
----
-
-## Applying Loot to Structure Chests
-
-### At Export Time (Recommended)
-
-Containers in the selection region are exported with their existing `LootTable` NBT tag captured into the `.tsaphstruct` v2 `LOOT REFS` section. `loader.place(...)` applies them automatically — no extra caller code needed.
-
-### Programmatically via the API
-
-```java
-ITsaphLootEngine lootEngine = StructureLoaderBridge.getLootEngine();
-BlockPos chestPos = new BlockPos(x, y, z);
-
-// Tag for deferred population on first player open (recommended)
-lootEngine.applyLootTag(world, chestPos,
-    LootTableRef.vanilla("minecraft:chests/simple_dungeon"),
-    world.random.nextLong());
-
-// Tag with a custom TsaphLoot table (seed ignored)
-lootEngine.applyLootTag(world, chestPos,
-    LootTableRef.tsaphloot("dungeon_chest"), 0L);
-
-// Populate immediately — no deferred open needed
-lootEngine.populate(world, chestPos, LootTableRef.tsaphloot("dungeon_chest"));
-```
-
-`applyLootTag` is the standard approach — lazy and crash-safe. Use `populate` for pre-filled display containers or non-interactive chests.
-
----
-
-## The `TsaphLootBuilder` Fluent Builder
-
-`TsaphLootBuilder` constructs `TsaphLootTable` instances in code without writing JSON. The API mirrors the JSON schema one-to-one.
-
-```java
-TsaphLootTable table = TsaphLootBuilder.create("my_chest")
-    .comment("Built in code")
-    .pool(p -> p
-        .rolls(3, 6)
-        .item("minecraft:bread")    .weight(30).count(1, 4).add()
-        .item("minecraft:arrow")    .weight(25).count(4, 16).add()
-        .item("minecraft:diamond")  .weight(5) .count(1, 3).add()
-        .empty(20)                              // weighted miss slot
-    )
-    .pool(p -> p
-        .rolls(0, 1)
-        .item("minecraft:enchanted_book")
-            .weight(10)
-            .enchant("minecraft:mending", 1)
-            .add()
-        .item("minecraft:diamond_sword")
-            .weight(4)
-            .enchant("minecraft:sharpness", 1, 4)
-            .named("Ancient Blade")
-            .add()
-    )
-    .build();
-```
-
-### Entry Builder Methods
-
-| Method | Description |
-|--------|-------------|
-| `.weight(n)` | Relative probability weight. Default: 1. |
-| `.count(n)` | Fixed stack size. |
-| `.count(min, max)` | Random stack size in `[min, max]`. |
-| `.enchant(id, level)` | Apply a fixed-level enchantment. |
-| `.enchant(id, min, max)` | Apply a random-level enchantment. |
-| `.nbt(snbt)` | Merge raw SNBT onto the item's `CUSTOM_DATA` component. |
-| `.named(text)` | Set a custom display name without writing SNBT manually. Cannot be combined with `.nbt()`. |
-| `.add()` | Commit the entry and return to the pool builder. |
-
-For the simplest workflow, write the table as a `.tsaphloot` JSON file and let the loader register it automatically on server start.
-
----
-
-## The `.tsaphloot` Format Reference
-
-`.tsaphloot` files are UTF-8 JSON.
-
-### Top-Level Schema
-
-```json
-{
-  "name":    "table_name",
-  "comment": "Optional description — ignored by the engine",
-  "pools":   [ ...pool objects... ]
-}
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Must match the file stem. Used as the reference ID. |
-| `comment` | No | Ignored at runtime. |
-| `pools` | Yes | All pools are evaluated every time the chest is opened. |
-
-### Pool Schema
-
-```json
-{
-  "rolls":   { "min": 3, "max": 6 },
-  "entries": [ ...entry objects... ]
-}
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `rolls` | Yes | How many draws this pool makes. Fixed integer or `{"min", "max"}` range. |
-| `entries` | Yes | Weighted item entries. One entry is selected per roll by weighted random. |
-
-### Entry Schema
-
-```json
-{
-  "item":         "minecraft:diamond_sword",
-  "weight":       10,
-  "count":        { "min": 1, "max": 2 },
-  "enchantments": [
-    { "id": "minecraft:sharpness", "level": { "min": 1, "max": 5 } }
-  ],
-  "nbt":     "{display:{Name:'[{\"text\":\"Cursed Blade\"}]'}}",
-  "name":    "Cursed Blade",
-  "comment": "Optional note — ignored"
-}
-```
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `item` | Yes (unless `type: empty`) | Item registry ID. |
-| `weight` | No (default: 1) | Relative probability weight. |
-| `count` | No (default: 1) | Fixed integer or `{"min", "max"}` range. |
-| `enchantments` | No | List of `{"id", "level"}` objects. Level can be fixed or a range. |
-| `nbt` | No | Raw SNBT merged onto the item stack. |
-| `name` | No | Display name shorthand — converts to display NBT automatically. Cannot be combined with `nbt`. |
-| `type` | No | `"item"` (default) or `"empty"` for a weighted miss slot. |
-| `comment` | No | Ignored at runtime. |
-
-### LootRange
-
-```json
-3                        // fixed value
-{ "min": 1, "max": 5 }  // random [1..5] inclusive
-```
-
-### Full Example
-
-```json
-{
-  "name": "dungeon_chest",
-  "comment": "Generic dungeon chest with three pools of escalating rarity.",
-  "pools": [
-    {
-      "rolls": { "min": 3, "max": 6 },
-      "entries": [
-        { "item": "minecraft:bread",  "weight": 30, "count": { "min": 1, "max": 4 } },
-        { "item": "minecraft:arrow",  "weight": 25, "count": { "min": 4, "max": 16 } },
-        { "item": "minecraft:torch",  "weight": 25, "count": { "min": 2, "max": 8 } }
-      ]
-    },
-    {
-      "rolls": { "min": 1, "max": 3 },
-      "entries": [
-        { "item": "minecraft:iron_ingot", "weight": 20, "count": { "min": 1, "max": 4 } },
-        { "item": "minecraft:iron_sword", "weight": 10, "count": 1 },
-        { "item": "minecraft:name_tag",   "weight": 4,  "count": 1 }
-      ]
-    },
-    {
-      "rolls": { "min": 0, "max": 1 },
-      "entries": [
-        { "item": "minecraft:diamond",        "weight": 20, "count": { "min": 1, "max": 3 } },
-        { "item": "minecraft:golden_apple",   "weight": 5,  "count": 1 },
-        { "item": "minecraft:enchanted_book", "weight": 10, "count": 1,
-          "enchantments": [ { "id": "minecraft:mending", "level": 1 } ] }
-      ]
-    }
-  ]
-}
-```
-
----
-
-## Bundled Loot Tables
-
-Bundled at `resources/data/sapphics-structure-library/tsaphloot/<n>.tsaphloot`:
-
-| Table Name | Description |
-|------------|-------------|
-| `dungeon_chest` | Three-pool generic dungeon loot with consumables, mid-tier, and rare treasures |
-| `armory_chest` | Military loot — ammunition, weapons, armour, trophy items |
-| `library_chest` | Books, paper, writing supplies, and rare enchanted books |
-| `temple_chest` | Temple-themed valuables, gold, emeralds, and artefacts |
-| `ancient_ruins_chest` | Degraded equipment and ancient-feeling rare drops |
-| `generic_chest` | Minimal fallback table suitable for any context |
-
-### Override Priority
-
-A table name is resolved in this order, with later sources winning:
+SSL's own pool-based engine. A synthetic key (`ssl:tsaphloot/<n>`) is written to the container and intercepted on first open. Tables load from three sources in order, with later sources overriding earlier ones:
 
 1. Bundled (mod jar)
 2. Datapack (`data/<namespace>/ssl_loot/`)
@@ -610,57 +609,152 @@ A table name is resolved in this order, with later sources winning:
 
 ---
 
+## Applying Loot to Structure Chests
+
+### At export time (recommended)
+
+Containers in the selection already carrying a `LootTable` NBT tag are captured into the `.tsaphstruct` v2 LOOT REFS section at export time. `loader.place(...)` applies them automatically — no extra caller code needed.
+
+### Programmatically
+
+```java
+ITsaphLootEngine engine = StructureLoaderBridge.getLootEngine();
+BlockPos pos = new BlockPos(x, y, z);
+
+// Tag for deferred population (fills on first player open)
+engine.applyLootTag(world, pos,
+    LootTableRef.vanilla("minecraft:chests/simple_dungeon"),
+    world.random.nextLong());
+
+// Tag with a TsaphLoot table
+engine.applyLootTag(world, pos, LootTableRef.tsaphloot("dungeon_chest"), 0L);
+
+// Populate immediately
+engine.populate(world, pos, LootTableRef.tsaphloot("dungeon_chest"));
+```
+
+---
+
+## The `TsaphLootBuilder` Fluent Builder
+
+Constructs `TsaphLootTable` instances in code without writing JSON:
+
+```java
+TsaphLootTable table = TsaphLootBuilder.create("my_chest")
+    .pool(p -> p
+        .rolls(3, 6)
+        .item("minecraft:bread")   .weight(30).count(1, 4).add()
+        .item("minecraft:diamond") .weight(5) .count(1, 3).add()
+        .empty(20)
+    )
+    .pool(p -> p
+        .rolls(0, 1)
+        .item("minecraft:enchanted_book")
+            .weight(10).enchant("minecraft:mending", 1).add()
+        .item("minecraft:diamond_sword")
+            .weight(4).enchant("minecraft:sharpness", 1, 4).named("Ancient Blade").add()
+    )
+    .build();
+```
+
+| Method | Description |
+|--------|-------------|
+| `.weight(n)` | Relative probability weight |
+| `.count(n)` | Fixed stack size |
+| `.count(min, max)` | Random stack size |
+| `.enchant(id, level)` | Fixed-level enchantment |
+| `.enchant(id, min, max)` | Random-level enchantment |
+| `.nbt(snbt)` | Merge raw SNBT onto the item |
+| `.named(text)` | Set display name without writing SNBT |
+| `.add()` | Commit entry and return to pool builder |
+
+---
+
+## The `.tsaphloot` Format Reference
+
+```json
+{
+  "name": "dungeon_chest",
+  "comment": "Optional note — ignored at runtime",
+  "pools": [
+    {
+      "rolls": { "min": 3, "max": 6 },
+      "entries": [
+        { "item": "minecraft:bread",  "weight": 30, "count": { "min": 1, "max": 4 } },
+        { "item": "minecraft:diamond","weight": 5,  "count": { "min": 1, "max": 3 } },
+        { "type": "empty",            "weight": 20 }
+      ]
+    },
+    {
+      "rolls": { "min": 0, "max": 1 },
+      "entries": [
+        {
+          "item": "minecraft:enchanted_book",
+          "weight": 10,
+          "enchantments": [ { "id": "minecraft:mending", "level": 1 } ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+`count` and `level` accept either a fixed integer or `{"min": N, "max": N}`. An entry with `"type": "empty"` generates no item but participates in the weight total to lower effective fill rate. The `name` field must match the file stem.
+
+---
+
+## Bundled Loot Tables
+
+| Table | Description |
+|-------|-------------|
+| `dungeon_chest` | Three-pool generic dungeon loot |
+| `armory_chest` | Weapons, armour, ammunition |
+| `library_chest` | Books, paper, enchanted books |
+| `temple_chest` | Gold, emeralds, artefacts |
+| `ancient_ruins_chest` | Degraded equipment, ancient rarities |
+| `generic_chest` | Minimal fallback |
+
+Override any table per-world by placing a `.tsaphloot` file of the same name in `<worldSave>/data/ssl_loot/`.
+
+---
+
 ## API Quick Reference
 
-### Entry Points
+### Entry points
 
 | Class | Purpose |
 |-------|---------|
-| `StructureLoaderBridge` | Single public gateway to all internal implementations |
-| `StructureLoaderBridge.getLoader()` | Returns `IStructureLoader` |
-| `StructureLoaderBridge.getExporter()` | Returns `IStructureExporter` |
-| `StructureLoaderBridge.getLootEngine()` | Returns `ITsaphLootEngine` |
-| `StructureLoaderBridge.getQueue(world)` | Returns the `StructureQueue` for a world |
+| `StructureLoaderBridge` | Single gateway to all internal implementations |
+| `StructureLoaderBridge.getLoader()` | `IStructureLoader` — load and place `.tsaphstruct` |
+| `StructureLoaderBridge.getExporter()` | `IStructureExporter` — export from world |
+| `StructureLoaderBridge.getLootEngine()` | `ITsaphLootEngine` — loot application |
+| `StructureLoaderBridge.getQueue(world)` | `StructureQueue` — deferred placement queue |
 | `StructureLoaderBridge.definitions()` | All registered datapack `StructureDefinition` instances |
+| `StructureLoaderBridge.loadMultiStruct(path)` | Load a `.tsaphmultistruct` bundle |
+| `StructureLoaderBridge.saveMultiStruct(bundle, path)` | Write a bundle to disk |
+| `StructureLoaderBridge.spawnMultiStruct(world, bundle, x, z, depth)` | Generate from a bundle |
+| `StructureLoaderBridge.beginSession(uuid)` | Start a multi-struct building session |
+| `StructureLoaderBridge.getSession(uuid)` | Retrieve an active session |
+| `StructureLoaderBridge.endSession(uuid)` | End and remove a session |
 
-### Key Types
+### Key types
 
 | Type | Description |
 |------|-------------|
-| `StructurePiece` | In-memory decoded structure (palette, blocks, block entities, loot refs) |
-| `StructurePlacement` | Fluent builder for loading and placing structures |
-| `StructureDefinition` | A datapack-driven structure placement definition |
-| `BlockEntry` | Palette entry mapping an index to a block state string |
-| `PendingPlacement` | A queued block or update trigger waiting for its chunk to load |
-| `LootTableRef` | Reference to a vanilla or TsaphLoot loot table |
+| `StructurePiece` | Decoded single structure |
+| `StructurePlacement` | Fluent builder for placing single structures |
+| `MultiStructBundle` | Decoded bundle of named pieces |
+| `MultiStructPiece` | A single piece within a bundle |
+| `ConnectionPoint` | A connector block's local position and facing direction |
+| `PieceRole` | `ROOM`, `HALLWAY`, or `PATH` |
+| `ConnectionType` | Junction shape for connector pieces |
+| `StructureDefinition` | Datapack-driven single structure placement definition |
+| `LootTableRef` | Reference to a vanilla or TsaphLoot table |
 | `TsaphLootTable` | Parsed `.tsaphloot` table |
-| `TsaphLootBuilder` | Fluent builder for constructing loot tables in code |
+| `TsaphLootBuilder` | Fluent builder for loot tables |
 | `StructureQueue` | Per-world persistent deferred placement queue |
 
-### `StructurePiece`
-
-```java
-// Returns local Y of the first non-air layer — applied automatically by StructurePlacement
-int groundOffset()
-```
-
-### `IStructureLoader`
-
-```java
-StructurePiece load(Path path) throws IOException;
-void place(ServerWorld world, StructurePiece piece, BlockPos origin);
-void processChunkQueue(ServerWorld world, int chunkX, int chunkZ);
-```
-
-### `ITsaphLootEngine`
-
-```java
-boolean applyLootTag(ServerWorld world, BlockPos pos, LootTableRef ref, long seed);
-boolean populate(ServerWorld world, BlockPos pos, LootTableRef ref);
-Optional<TsaphLootTable> resolve(String name);
-```
-
-### `LootTableRef` Factories
+### `LootTableRef` factories
 
 ```java
 LootTableRef.vanilla("minecraft:chests/simple_dungeon");

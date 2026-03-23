@@ -75,7 +75,7 @@ When SSL generates that structure, the barrel transforms into a chest and distri
 ## 💡 Pro Tips for Better Builds
 
 * **Avoid the "Floating" Look:** When selecting your build, ensure you include the foundation or one layer of dirt/stone to help it blend into the terrain.
-* **Use Terrain Blocks:** Use SSL's special **Terrain Blocks** in your save files. These act as "transparent" blocks that allow the natural world terrain to remain visible through the structure—perfect for hillsides or ruins.
+* **Use Terrain Blocks:** Use SSL's special **Terrain Blocks** in your save files. These act as "transparent" blocks that allow the natural world terrain to replace them when the structure generates-perfect for hillsides or ruins.
 * **Modular is Better:** Instead of saving one giant city, save 10 different houses and use the Multi-Structure system to generate a unique city every time.
 
 ---

@@ -1,263 +1,89 @@
-# Sapphics Structure Library — Beginner Guide
+# 🏛️ Sapphics Structure Library (SSL) — Beginner Guide
 
-Welcome to **Sapphics Structure Library (SSL)** — a powerful mod that lets you save, load, and generate custom structures in Minecraft without size limits.
-
-This guide will teach you the basics in just a few minutes.
+Welcome to the **Sapphics Structure Library**. SSL is a high-performance structure engine designed to bypass the limitations of vanilla Minecraft. Whether you're building a single house or a procedurally generated empire, SSL handles the heavy lifting across infinite distances and unloaded chunks.
 
 ---
 
-# 🧱 What This Mod Does
+## 🧱 What is SSL?
 
-SSL lets you:
-
-- Save builds as structure files
-- Load them anywhere instantly
-- Create procedural structures (like villages or dungeons)
-- Add custom loot without writing JSON
-- Generate structures automatically using datapacks
-
----
-
-# 🚀 Quick Start (5 Minutes)
-
-## 1. Get the Structure Wand
-
-Open the creative inventory and find:
-
-- **Structure Wand**
+SSL isn't just a clipboard; it’s a world-generation powerhouse.
+* **Infinite Scale:** Save and load builds with no size limits.
+* **Procedural Mastery:** Generate complex dungeons, villages, and road networks.
+* **Stability:** Works seamlessly across unloaded chunks without "cutting off" builds.
+* **Zero-JSON Loot:** Create custom loot tables physically in-game.
+* **Developer Ready:** Fully compatible with datapacks for automatic world-gen.
 
 ---
 
-## 2. Select Your Build
+## 🚀 Quick Start (5-Minute Setup)
 
-1. Right-click a block → sets Position 1  
-2. Sneak + Right-click another block → sets Position 2  
+### 1. Get the Tools
+Grab the **Structure Wand** from the creative inventory.
 
-You’ve now selected your structure.
+### 2. Select Your Build
+1.  **Right-Click** a block to set **Position 1**.
+2.  **Sneak + Right-Click** a block to set **Position 2**.
+*Your selection area is now defined.*
 
----
-
-## 3. Save the Structure
-
-```
-/tsaph save my_structure
-```
-
-Your structure is now saved.
+### 3. Save & Load
+* **To Save:** `/tsaph save <name>`
+* **To Load:** `/tsaph load <name> ~ ~ ~`
 
 ---
 
-## 4. Load the Structure
+## 🔗 Multi-Structure (Procedural Generation)
 
-```
-/tsaph load my_structure ~ ~ ~
-```
+The real power of SSL lies in **Connection Points**. Think of these as "sockets" that allow different structure files to snap together like LEGO bricks.
 
-This will place the structure at your current location.
-
----
-
-✅ Done! You’ve just saved and loaded your first structure.
-
----
-
-# 🏗️ Creating Better Structures
-
-## Avoid Floating Builds
-
-If your structure floats when placed:
-
-- Make sure you **don’t include empty air under it** when selecting
-- Or place it slightly lower manually
+### The 6-Step Workflow:
+1.  **Initialize:** Start a session with `/tsaph multi begin`.
+2.  **Build:** Create a module (e.g., a room, a hallway, or a tower).
+3.  **Place Sockets:** Put **Connection Point Blocks** at the exits. 
+    * *Note: The arrows must face **OUTWARD** toward where the next piece should attach.*
+4.  **Register:** Add the piece to your current session: `/tsaph multi add <name> <role>`
+5.  **Finalize:** Save the entire logic bundle: `/tsaph multi save <bundle_name>`
+6.  **Generate:** Spawn your procedural creation: `/tsaph multi spawn <bundle_name> ~ ~`
 
 ---
 
-## Use Structure Terrain Blocks
+## 🎁 Loot Made Easy (The "Loot Barrel")
 
-- These blocks **don’t place anything**
-- They let the world generate naturally instead
+Forget writing complex JSON files. SSL lets you design loot visually.
 
-Use them for:
-- Underground builds
-- Hillside structures
-- Natural blending
+1.  Give yourself a barrel: `/give @s sapphics-structure-library:loot_barrel`
+2.  **Place it** inside your structure.
+3.  **Fill it** with items. (e.g., 64 Cobblestone for a common drop, 1 Diamond for a rare drop).
+4.  **Save** your structure normally.
 
----
-
-# 🔗 Multi-Structure (Procedural Generation)
-
-This lets you create things like:
-- Villages
-- Dungeons
-- Road systems
-
-## Step 1 — Start a Session
-
-```
-/tsaph multi begin
-```
+When SSL generates that structure, the barrel transforms into a chest and distributes the items based on the quantities you provided.
 
 ---
 
-## Step 2 — Build a Piece
+## 🛠️ Command Reference
 
-Build something like:
-- A house
-- A corridor
-- A road
-
----
-
-## Step 3 — Add Connection Points
-
-Use the **Connection Point Block** at entrances.
-
-👉 Place them facing OUTWARD
-
-Example:
-
-```
-[ROOM]
-   |
-[CONNECTION]
-```
+| Action | Command |
+| :--- | :--- |
+| **Save Structure** | `/tsaph save <name>` |
+| **Load Structure** | `/tsaph load <name> <x> <y> <z>` |
+| **Start Multi-Session**| `/tsaph multi begin` |
+| **Add to Multi** | `/tsaph multi add <name> <role>` |
+| **Save Multi-Bundle** | `/tsaph multi save <bundle_name>` |
+| **Spawn Multi** | `/tsaph multi spawn <bundle_name> <x> <z>` |
 
 ---
 
-## Step 4 — Select and Add It
+## 💡 Pro Tips for Better Builds
 
-```
-/tsaph multi add house ROOM
-```
-
----
-
-## Step 5 — Save the Bundle
-
-```
-/tsaph multi save my_village
-```
+* **Avoid the "Floating" Look:** When selecting your build, ensure you include the foundation or one layer of dirt/stone to help it blend into the terrain.
+* **Use Terrain Blocks:** Use SSL's special **Terrain Blocks** in your save files. These act as "transparent" blocks that allow the natural world terrain to remain visible through the structure—perfect for hillsides or ruins.
+* **Modular is Better:** Instead of saving one giant city, save 10 different houses and use the Multi-Structure system to generate a unique city every time.
 
 ---
 
-## Step 6 — Spawn It
-
-```
-/tsaph multi spawn my_village ~ ~
-```
+## ⚠️ Troubleshooting
+* **My pieces aren't connecting:** Check the rotation of your Connection Point Blocks. They must face the direction of the expansion.
+* **My build is flying:** You likely selected too many "Air" blocks beneath your build. Re-select and save with a tighter base.
 
 ---
 
-🎉 Your procedural structure is now generating!
-
----
-
-# 🎁 Adding Loot (Easy Way)
-
-## Use the Loot Barrel
-
-Get it with:
-
-```
-/give @s sapphics-structure-library:loot_barrel
-```
-
----
-
-## How It Works
-
-1. Place the Loot Barrel in your structure
-2. Put items inside
-3. Save the structure
-
-When generated:
-- The barrel becomes a chest
-- Loot is automatically added
-
----
-
-## Example
-
-- 20 Iron = common
-- 1 Diamond = rare
-
-No JSON needed.
-
----
-
-# 📦 Useful Commands
-
-## Structures
-
-```
-/tsaph save <name>
-/tsaph load <name> <x> <y> <z>
-/tsaph list
-```
-
----
-
-## Multi-Structures
-
-```
-/tsaph multi begin
-/tsaph multi add <name> <role>
-/tsaph multi save <name>
-/tsaph multi spawn <name> <x> <z>
-```
-
----
-
-## Loot
-
-```
-/tsaph loot list
-/tsaph loot reload
-```
-
----
-
-# 🧠 Tips
-
-- You can make **huge structures** (no size limit)
-- Structures work across **unloaded chunks**
-- Everything saves and loads even after restarting the world
-- Use multiple small pieces for better procedural generation
-
----
-
-# ⚠️ Common Mistakes
-
-❌ Forgetting connection points  
-→ Structures won’t connect
-
-❌ Wrong direction on connection blocks  
-→ Pieces won’t attach
-
-❌ Selecting too much air  
-→ Floating builds
-
----
-
-# 📚 What Next?
-
-Once you understand the basics, check the full developer documentation for:
-
-- Java API usage
-- Datapack generation
-- Advanced loot systems
-- Internal formats
-
----
-
-# 💬 Final Notes
-
-This mod is designed to be:
-
-- Fast ⚡
-- Flexible 🧩
-- Easy to use 🧠
-
-Start simple, experiment, and build something massive.
-
-Happy building!
+**Happy Building!** SSL is built to be fast, flexible, and intuitive. We can't wait to see what massive worlds you create.

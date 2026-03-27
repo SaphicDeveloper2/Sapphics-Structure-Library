@@ -131,9 +131,7 @@ Typical uses:
 
 Developer-only authoring block for structure loot.
 
-- Not in the creative tab.
-- Obtain with `/give @s sapphics-structure-library:loot_barrel`.
-- Replaced with a vanilla chest when the structure is generated.
+- Now in the creative tab.
 
 Modes:
 

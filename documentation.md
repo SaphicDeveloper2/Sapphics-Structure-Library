@@ -3,7 +3,7 @@
 **Mod ID:** `sapphics-structure-library`  
 **Minecraft:** 1.21.1 (Fabric)  
 **Depends:** Fabric API  
-**Status:** Updated for the current codebase as of 2026-03-26
+**Status:** Updated for the current codebase as of 2026-03-27
 
 ---
 
@@ -24,12 +24,15 @@
 13. [Exact-origin and pre-queued generation](#exact-origin-and-pre-queued-generation)
 14. [Two queue systems](#two-queue-systems)
 15. [Two-pass placement system](#two-pass-placement-system)
-16. [Dimension targeting](#dimension-targeting)
-17. [Datapack loading](#datapack-loading)
-18. [File formats](#file-formats)
-19. [Loot system](#loot-system)
-20. [Network packets](#network-packets)
-21. [API quick reference](#api-quick-reference)
+16. [Chunk generation modes](#chunk-generation-modes)
+17. [TsaphGen worldgen system](#tsaphgen-worldgen-system)
+18. [Programmatic loot tables](#programmatic-loot-tables)
+19. [Dimension targeting](#dimension-targeting)
+20. [Datapack loading](#datapack-loading)
+21. [File formats](#file-formats)
+22. [Loot system](#loot-system)
+23. [Network packets](#network-packets)
+24. [API quick reference](#api-quick-reference)
 
 ---
 
@@ -79,6 +82,17 @@ Older SSL documentation is now outdated in several important ways. The current c
 - **The on-disk `pending.bin` queue file is not versioned the way some older docs claimed.**
   - It is written as `[int count]` followed by repeated `PendingPlacement` records.
 - **Loot Barrel packets now include `ExportTsaphloot`.**
+- **`ChunkGenerationMode` enum for controlling chunk handling.**
+  - `QUEUE` — default deferred placement
+  - `FORCE_GENERATE` — immediate chunk preparation
+- **`TsaphGenConfig` and `TsaphGenRegistry` for programmatic worldgen.**
+  - A new `.tsaphgen` file format for flexible worldgen definitions.
+- **`TsaphLootBuilder` for programmatic loot table construction.**
+- **`StructureLoaderBridge.definitions()` method for listing datapack definitions.**
+- **`StructureLoaderBridge.ensureChunksGenerated(...)` for manual chunk preparation.**
+- **`StructureLoaderBridge.placeStructure(...)` with chunk mode control.**
+- **`ITsaphLootEngine.resolve(String name)` for looking up loot tables.**
+- **`StructurePlacement.withChunkGenerationMode(...)` in the fluent API.**
 
 ---
 
@@ -104,7 +118,7 @@ A directional full block that marks openings in a multi-structure piece.
 ### Structure Terrain Block
 **Block ID:** `sapphics-structure-library:structure_terrain`
 
-A transparent placeholder meaning “leave the world alone here”. When the structure loader sees it, it skips that block position entirely.
+A transparent placeholder meaning "leave the world alone here". When the structure loader sees it, it skips that block position entirely.
 
 Typical uses:
 
@@ -255,7 +269,7 @@ Written files:
 
 Notes:
 
-- `depth` defaults to `ProceduralEngine.DEFAULT_MAX_DEPTH`.
+- `depth` defaults to `ProceduralEngine.DEFAULT_MAX_DEPTH` (6).
 - `seed` is optional.
 - If an `ANCHOR` exists, it is used as the seed piece.
 - If not, a weighted `ROOM` is used.
@@ -370,6 +384,18 @@ BlockPos origin = new BlockPos(x, 64 - piece.groundOffset(), z);
 loader.place(world, piece, origin);
 ```
 
+### Placement with chunk mode control
+
+```java
+StructureLoaderBridge.placeStructure(
+    world,
+    piece,
+    origin,
+    BlockRotation.CLOCKWISE_90,
+    ChunkGenerationMode.FORCE_GENERATE
+);
+```
+
 ---
 
 ## StructurePlacement builder
@@ -402,7 +428,9 @@ Methods:
 | `atY(y)` | Use literal Y |
 | `withYOffset(n)` | Apply extra Y offset |
 | `withoutGroundOffset()` | Disable ground-offset correction |
+| `withChunkGenerationMode(mode)` | Override chunk handling (see [Chunk generation modes](#chunk-generation-modes)) |
 | `place(world)` | Execute placement |
+| `piece()` | Get the underlying `StructurePiece` |
 
 ---
 
@@ -422,6 +450,20 @@ StructureLoaderBridge.spawnMultiStructAt(world, bundle, new BlockPos(x, y, z), 6
 ```
 
 This is newer than older docs. It does **not** sample terrain height. The supplied Y is used directly.
+
+### With chunk mode control
+
+```java
+StructureLoaderBridge.spawnMultiStruct(
+    world, bundle, x, z, 6, seed,
+    ChunkGenerationMode.FORCE_GENERATE
+);
+
+StructureLoaderBridge.spawnMultiStructAt(
+    world, bundle, origin, 6, seed,
+    ChunkGenerationMode.FORCE_GENERATE
+);
+```
 
 ### Registry access
 
@@ -528,7 +570,7 @@ Properties:
 
 - keyed by dimension and anchor chunk
 - not persisted
-- stores requests like “generate this structure when that chunk in that dimension becomes available”
+- stores requests like "generate this structure when that chunk in that dimension becomes available"
 - used by `queueStructure(...)` and `queueMultiStruct(...)`
 
 Do **not** confuse these two systems in integrations.
@@ -556,6 +598,250 @@ This is what fixes:
 - stairs updating shape
 - waterlogged block updates
 - fluid propagation across chunk boundaries
+
+---
+
+## Chunk generation modes
+
+SSL now supports two chunk-handling strategies for structure placement:
+
+### `ChunkGenerationMode.QUEUE`
+
+This is the **default** mode.
+
+Behavior:
+
+- loaded chunks are written immediately
+- unloaded chunks are deferred into SSL's persistent queue
+- queued blocks are applied when those chunks load naturally
+- this is the best choice for normal worldgen and low-latency server behavior
+
+Use when:
+
+- the structure does not need to exist instantly
+- the destination will be entered naturally anyway
+- you want the cheapest server-side behavior
+
+### `ChunkGenerationMode.FORCE_GENERATE`
+
+This mode is **opt-in**.
+
+Behavior:
+
+- SSL computes the exact chunk footprint of the placement
+- only the required chunks are synchronously generated/loaded
+- the structure is placed immediately
+- no wide-area preload loop is required
+
+Use when:
+
+- a teleport destination must exist right now
+- another mod needs immediate block access after placement
+- you are integrating SSL into a custom dimension travel or portal flow
+
+### API usage
+
+#### Single structures
+
+```java
+// With rotation
+StructureLoaderBridge.placeStructure(
+    world, piece, origin,
+    BlockRotation.CLOCKWISE_90,
+    ChunkGenerationMode.FORCE_GENERATE
+);
+
+// Without rotation
+StructureLoaderBridge.placeStructure(
+    world, piece, origin,
+    ChunkGenerationMode.FORCE_GENERATE
+);
+```
+
+#### Fluent API
+
+```java
+StructurePlacement.of(piece)
+    .at(x, z)
+    .onSurface()
+    .withChunkGenerationMode(ChunkGenerationMode.FORCE_GENERATE)
+    .place(world);
+```
+
+#### Multi-structures
+
+```java
+StructureLoaderBridge.spawnMultiStruct(
+    world, bundle, x, z, maxDepth, seed,
+    ChunkGenerationMode.FORCE_GENERATE
+);
+
+StructureLoaderBridge.spawnMultiStructAt(
+    world, bundle, origin, maxDepth, seed,
+    ChunkGenerationMode.FORCE_GENERATE
+);
+```
+
+### Manual chunk preparation
+
+For advanced use cases, you can prepare chunks before placement:
+
+```java
+// By block bounds
+StructureLoaderBridge.ensureChunksGenerated(
+    world,
+    new BlockPos(minX, minY, minZ),
+    new BlockPos(maxX, maxY, maxZ)
+);
+
+// By chunk radius around a center
+StructureLoaderBridge.ensureChunksGenerated(
+    world,
+    centerPos,
+    3  // chunk radius
+);
+```
+
+---
+
+## TsaphGen worldgen system
+
+SSL provides a flexible worldgen configuration system through `.tsaphgen` files and the `TsaphGenRegistry` API.
+
+### TsaphGenConfig
+
+`TsaphGenConfig` defines where a structure spawns — which dimensions, which biomes, how frequently, and with which vertical placement strategy. Unlike `StructureDefinition` (which tightly couples a single `.tsaphstruct` to its JSON definition), a `.tsaphgen` file can reference **any** registered structure and target **multiple** dimensions.
+
+### Datapack location
+
+```text
+data/<namespace>/ssl_worldgen/<name>.tsaphgen
+```
+
+### JSON schema
+
+```json
+{
+  "comment":     "Optional human-readable note — ignored by the engine",
+  "structure":   "mymod:my_village",
+  "weight":      0.005,
+  "dimensions":  ["minecraft:overworld"],
+  "biomes":      ["minecraft:plains", "minecraft:forest"],
+  "y_placement": "surface",
+  "y_offset":    0,
+  "salt":        12345
+}
+```
+
+### Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `structure` | string | (paired) | Namespaced id of the target structure. If omitted, uses the same namespace/stem as the `.tsaphgen` file. |
+| `weight` | float | `0.005` | Per-chunk spawn probability (0.0–1.0). ~1-in-200 chunks by default. |
+| `dimensions` | array | `["minecraft:overworld"]` | List of dimension registry keys. Use `["*"]` for any dimension. |
+| `biomes` | array | (all) | Biome whitelist. Empty or omitted = all biomes. |
+| `y_placement` | string | `"surface"` | One of `"surface"`, `"ocean_floor"`, `"absolute"`. |
+| `y_offset` | int | `0` | Offset applied on top of the computed Y. |
+| `salt` | long | `0` | Per-config seed modifier. |
+
+### Programmatic registration
+
+Register configs from code during `ModInitializer.onInitialize()`:
+
+```java
+TsaphGenRegistry.register(
+    new TsaphGenConfig.Builder("mymod:my_village")
+        .structure("mymod:my_village")
+        .weight(0.004f)
+        .dimensions("minecraft:overworld")
+        .biomes("minecraft:plains", "minecraft:sunflower_plains")
+        .yPlacement(StructureDefinition.YPlacement.SURFACE)
+        .salt(7391L)
+        .build()
+);
+```
+
+### Builder methods
+
+| Method | Description |
+|---|---|
+| `structure(id)` | Set the structure to spawn (optional — defaults to pairing). |
+| `weight(float)` | Per-chunk spawn probability. |
+| `dimensions(String...)` | Replace the dimension list. |
+| `anyDimension()` | Allow any dimension (wildcard `*`). |
+| `biomes(String...)` | Set biome whitelist (empty = all biomes). |
+| `yPlacement(YPlacement)` | Vertical placement strategy. |
+| `yOffset(int)` | Vertical offset on top of computed Y. |
+| `salt(long)` | Per-config seed modifier. |
+| `build()` | Finalize and return the `TsaphGenConfig`. |
+
+### Registry API
+
+```java
+// All registered configs (code + datapack)
+List<TsaphGenConfig> all = TsaphGenRegistry.all();
+
+// Count of registered configs
+int count = TsaphGenRegistry.size();
+```
+
+---
+
+## Programmatic loot tables
+
+SSL provides `TsaphLootBuilder` for constructing loot tables directly in Java code.
+
+### Usage
+
+```java
+TsaphLootTable table = TsaphLootBuilder.create("my_dungeon_chest")
+    .comment("Built in code — same result as the JSON file")
+    .pool(pool -> pool
+        .rolls(3, 6)
+        .item("minecraft:bread")   .weight(30).count(1, 4) .add()
+        .item("minecraft:arrow")   .weight(25).count(4, 16).add()
+        .item("minecraft:diamond") .weight(5) .count(1, 3) .add()
+        .empty(20)   // weighted miss
+    )
+    .pool(pool -> pool
+        .rolls(0, 1)
+        .item("minecraft:enchanted_book")
+            .weight(10)
+            .enchant("minecraft:mending", 1)
+            .add()
+        .item("minecraft:golden_apple").weight(5).add()
+    )
+    .build();
+```
+
+### Table builder methods
+
+| Method | Description |
+|---|---|
+| `create(name)` | Start building a table with the given name |
+| `comment(text)` | Optional description (stored in JSON, ignored at runtime) |
+| `pool(Consumer<PoolBuilder>)` | Add a loot pool with the given configuration |
+| `build()` | Finalize and return the `TsaphLootTable` |
+
+### Pool builder methods
+
+| Method | Description |
+|---|---|
+| `rolls(int)` | Fixed number of rolls |
+| `rolls(min, max)` | Random roll count in `[min, max]` inclusive |
+| `item(itemId)` | Begin configuring an item entry (returns `EntryBuilder`) |
+| `empty(weight)` | Add a weighted empty-roll entry (reduces effective fill rate) |
+
+### Entry builder methods
+
+| Method | Description |
+|---|---|
+| `weight(int)` | Relative probability weight (higher = more likely) |
+| `count(int)` | Fixed stack size |
+| `count(min, max)` | Random stack size in `[min, max]` inclusive |
+| `enchant(enchantId, level)` | Apply a fixed-level enchantment |
+| `add()` | Commit the entry and return to the pool builder |
 
 ---
 
@@ -602,6 +888,12 @@ data/<namespace>/ssl_multistructs/<name>.tsaphmultistruct
 
 ```text
 data/<namespace>/ssl_loot/<name>.tsaphloot
+```
+
+### Worldgen configs
+
+```text
+data/<namespace>/ssl_worldgen/<name>.tsaphgen
 ```
 
 ### World-specific loot overrides
@@ -659,6 +951,10 @@ Current role wire values:
 | `PATH` | `2` |
 | `ANCHOR` | `3` |
 
+### `.tsaphgen`
+
+JSON format for worldgen configuration. See [TsaphGen worldgen system](#tsaphgen-worldgen-system).
+
 ### Persistent queue file: `pending.bin`
 
 Older docs describing a separate queue-file version/header are no longer accurate.
@@ -696,6 +992,12 @@ Programmatic application:
 ITsaphLootEngine engine = StructureLoaderBridge.getLootEngine();
 engine.applyLootTag(world, pos, LootTableRef.tsaphloot("dungeon_chest"), 0L);
 engine.populate(world, pos, LootTableRef.vanilla("minecraft:chests/simple_dungeon"));
+```
+
+### Looking up loot tables
+
+```java
+Optional<TsaphLootTable> table = engine.resolve("dungeon_chest");
 ```
 
 ---
@@ -746,10 +1048,17 @@ That receiver:
 | `StructureLoaderBridge.processQueuedGenerations(world, pos)` | apply queued high-level generation requests |
 | `StructureLoaderBridge.processChunkDefinitions(world, pos)` | run datapack definition placement checks |
 | `StructureLoaderBridge.onServerStopping()` | save all persistent queues |
+| `StructureLoaderBridge.definitions()` | list all datapack `StructureDefinition` entries |
 | `StructureLoaderBridge.loadMultiStruct(path)` | load bundle from disk |
 | `StructureLoaderBridge.saveMultiStruct(bundle, path)` | save bundle and companion JSON |
 | `StructureLoaderBridge.spawnMultiStruct(world, bundle, x, z, depth, seed)` | terrain-aware bundle generation |
+| `StructureLoaderBridge.spawnMultiStruct(world, bundle, x, z, depth, seed, chunkMode)` | with chunk mode control |
 | `StructureLoaderBridge.spawnMultiStructAt(world, bundle, origin, depth, seed)` | exact-origin bundle generation |
+| `StructureLoaderBridge.spawnMultiStructAt(world, bundle, origin, depth, seed, chunkMode)` | with chunk mode control |
+| `StructureLoaderBridge.placeStructure(world, piece, origin, rotation, chunkMode)` | single structure with chunk mode |
+| `StructureLoaderBridge.placeStructure(world, piece, origin, chunkMode)` | convenience overload (no rotation) |
+| `StructureLoaderBridge.ensureChunksGenerated(world, min, max)` | prepare chunks by block bounds |
+| `StructureLoaderBridge.ensureChunksGenerated(world, center, radius)` | prepare chunks by radius |
 | `StructureLoaderBridge.queueStructure(...)` | pre-queue a standalone structure for later chunk availability |
 | `StructureLoaderBridge.queueMultiStruct(...)` | pre-queue a bundle for later chunk availability |
 | `StructureLoaderBridge.getMultiStruct(name)` | lookup by name |
@@ -771,11 +1080,18 @@ That receiver:
 | `MultiStructPiece` | one bundle piece |
 | `ConnectionPoint` | connector position + facing |
 | `PieceRole` | `ANCHOR`, `ROOM`, `HALLWAY`, `PATH` |
+| `ChunkGenerationMode` | `QUEUE` (default) or `FORCE_GENERATE` |
 | `StructureQueue` | persistent per-world block queue |
 | `PendingPlacement` | one deferred block or update-only trigger |
 | `LootTableRef` | TsaphLoot or vanilla loot reference |
 | `TsaphLootTable` | parsed SSL loot table |
+| `TsaphLootBuilder` | fluent builder for constructing loot tables in code |
 | `LootBarrelBlockEntity` | authoring block entity for in-world loot |
+| `StructureDefinition` | datapack-driven structure placement definition |
+| `TsaphGenConfig` | flexible worldgen configuration (`.tsaphgen`) |
+| `TsaphGenRegistry` | registry for programmatic worldgen configs |
+| `StructureRotation` | rotation math utilities |
+| `RegionMarker` | fast-fail region gate for binary loader |
 
 ---
 
@@ -785,3 +1101,6 @@ That receiver:
 - Use `queueStructure(...)` / `queueMultiStruct(...)` when you need to stage content before a dimension is live.
 - Use `StructureQueue` only for low-level per-block deferred placement behavior.
 - If you need exact Y control for a multi-structure, use `spawnMultiStructAt(...)`, not `spawnMultiStruct(...)`.
+- Use `ChunkGenerationMode.FORCE_GENERATE` when you need the structure to exist immediately (e.g., teleport destinations).
+- Use `TsaphGenConfig` and `TsaphGenRegistry` for flexible worldgen definitions that can target multiple dimensions.
+- Use `TsaphLootBuilder` to construct loot tables programmatically instead of writing JSON.

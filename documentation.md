@@ -136,8 +136,8 @@ Typical uses:
 
 Developer-only authoring block for structure loot.
 
-- Not in the creative tab.
-- Obtain with `/give @s sapphics-structure-library:loot_barrel`.
+- Available in the **Functional Blocks** creative tab.
+- Can also obtain with `/give @s sapphics-structure-library:loot_barrel`.
 - Replaced with a vanilla chest when the structure is generated.
 
 Modes:
@@ -832,7 +832,8 @@ data/<namespace>/ssl_worldgen/<name>.tsaphgen
   "biomes":      ["minecraft:plains", "minecraft:forest"],
   "y_placement": "surface",
   "y_offset":    0,
-  "salt":        12345
+  "salt":        12345,
+  "interior_fill": "skip_air"
 }
 ```
 
@@ -847,6 +848,7 @@ data/<namespace>/ssl_worldgen/<name>.tsaphgen
 | `y_placement` | string | `"surface"` | One of `"surface"`, `"ocean_floor"`, `"absolute"`. |
 | `y_offset` | int | `0` | Offset applied on top of the computed Y. |
 | `salt` | long | `0` | Per-config seed modifier. |
+| `interior_fill` | string | `"skip_air"` | How air blocks are handled: `"skip_air"` (terrain can bleed) or `"fill_air"` (clears interiors). |
 
 ### Programmatic registration
 
@@ -861,6 +863,7 @@ TsaphGenRegistry.register(
         .biomes("minecraft:plains", "minecraft:sunflower_plains")
         .yPlacement(StructureDefinition.YPlacement.SURFACE)
         .salt(7391L)
+        .interiorFill(InteriorFillMode.FILL_AIR)  // optional: clear interiors
         .build()
 );
 ```
@@ -877,6 +880,7 @@ TsaphGenRegistry.register(
 | `yPlacement(YPlacement)` | Vertical placement strategy. |
 | `yOffset(int)` | Vertical offset on top of computed Y. |
 | `salt(long)` | Per-config seed modifier. |
+| `interiorFill(InteriorFillMode)` | How air blocks are handled (`SKIP_AIR` or `FILL_AIR`). |
 | `build()` | Finalize and return the `TsaphGenConfig`. |
 
 ### Registry API
@@ -980,6 +984,30 @@ The procedural engine also routes connector preference by dimension string:
 data/<namespace>/ssl_structures/<name>.json
 data/<namespace>/ssl_structures/<name>.tsaphstruct
 ```
+
+The `.json` definition file controls how and where the structure spawns:
+
+```json
+{
+  "dimension":   "minecraft:overworld",
+  "biomes":      ["minecraft:plains", "minecraft:forest"],
+  "y_placement": "surface",
+  "y_offset":    0,
+  "frequency":   0.005,
+  "salt":        12345,
+  "interior_fill": "skip_air"
+}
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `dimension` | string | `"minecraft:overworld"` | Target dimension. Use `"*"` for any dimension. |
+| `biomes` | array | (all) | Biome whitelist. Empty = all biomes. |
+| `y_placement` | string | `"surface"` | One of `"surface"`, `"ocean_floor"`, `"absolute"`. |
+| `y_offset` | int | `0` | Offset applied on top of the computed Y. |
+| `frequency` | float | `0.005` | Per-chunk spawn probability (0.0–1.0). |
+| `salt` | long | `0` | Per-definition seed modifier. |
+| `interior_fill` | string | `"skip_air"` | How air blocks are handled: `"skip_air"` or `"fill_air"`. |
 
 ### Multi-structures
 

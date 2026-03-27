@@ -25,14 +25,15 @@
 14. [Two queue systems](#two-queue-systems)
 15. [Two-pass placement system](#two-pass-placement-system)
 16. [Chunk generation modes](#chunk-generation-modes)
-17. [TsaphGen worldgen system](#tsaphgen-worldgen-system)
-18. [Programmatic loot tables](#programmatic-loot-tables)
-19. [Dimension targeting](#dimension-targeting)
-20. [Datapack loading](#datapack-loading)
-21. [File formats](#file-formats)
-22. [Loot system](#loot-system)
-23. [Network packets](#network-packets)
-24. [API quick reference](#api-quick-reference)
+17. [Interior fill modes](#interior-fill-modes)
+18. [TsaphGen worldgen system](#tsaphgen-worldgen-system)
+19. [Programmatic loot tables](#programmatic-loot-tables)
+20. [Dimension targeting](#dimension-targeting)
+21. [Datapack loading](#datapack-loading)
+22. [File formats](#file-formats)
+23. [Loot system](#loot-system)
+24. [Network packets](#network-packets)
+25. [API quick reference](#api-quick-reference)
 
 ---
 
@@ -93,6 +94,10 @@ Older SSL documentation is now outdated in several important ways. The current c
 - **`StructureLoaderBridge.placeStructure(...)` with chunk mode control.**
 - **`ITsaphLootEngine.resolve(String name)` for looking up loot tables.**
 - **`StructurePlacement.withChunkGenerationMode(...)` in the fluent API.**
+- **`InteriorFillMode` enum for controlling terrain bleed-through.**
+  - `SKIP_AIR` — default, air blocks skipped (terrain can bleed into interiors)
+  - `FILL_AIR` — air blocks placed explicitly (clears terrain from interiors)
+- **`StructurePlacement.withInteriorAirFill()` in the fluent API.**
 
 ---
 
@@ -131,7 +136,9 @@ Typical uses:
 
 Developer-only authoring block for structure loot.
 
-- Now in the creative tab.
+- Not in the creative tab.
+- Obtain with `/give @s sapphics-structure-library:loot_barrel`.
+- Replaced with a vanilla chest when the structure is generated.
 
 Modes:
 
@@ -427,6 +434,8 @@ Methods:
 | `withYOffset(n)` | Apply extra Y offset |
 | `withoutGroundOffset()` | Disable ground-offset correction |
 | `withChunkGenerationMode(mode)` | Override chunk handling (see [Chunk generation modes](#chunk-generation-modes)) |
+| `withInteriorAirFill()` | Enable interior clearing (see [Interior fill modes](#interior-fill-modes)) |
+| `withInteriorFillMode(mode)` | Set interior fill mode explicitly |
 | `place(world)` | Execute placement |
 | `piece()` | Get the underlying `StructurePiece` |
 
@@ -699,6 +708,102 @@ StructureLoaderBridge.ensureChunksGenerated(
     3  // chunk radius
 );
 ```
+
+---
+
+## Interior fill modes
+
+By default, SSL skips air blocks when placing structures — existing world blocks (terrain, ores, caves) remain where the structure has air. This is efficient but can cause terrain to "bleed through" into enclosed interior spaces.
+
+SSL now supports explicit interior clearing through `InteriorFillMode`.
+
+### `InteriorFillMode.SKIP_AIR`
+
+This is the **default** mode.
+
+Behavior:
+
+- air blocks in the structure definition are skipped
+- existing world blocks remain in those positions
+- terrain, ores, and caves can intersect structure interiors
+- fastest placement (fewer block operations)
+
+Use when:
+
+- open-air structures (ruins, monuments, towers)
+- structures designed to blend with terrain
+- performance is critical
+
+### `InteriorFillMode.FILL_AIR`
+
+This mode is **opt-in**.
+
+Behavior:
+
+- air blocks in the structure definition are explicitly placed as air
+- clears any terrain that would otherwise intrude into interiors
+- structure blocks are placed on top, so the structure itself is never affected
+- `StructureTerrain` blocks are still respected (never replaced with air)
+
+Use when:
+
+- enclosed structures with interior rooms (dungeons, houses, bunkers)
+- underground structures where terrain would fill hallways
+- any structure where interior air space must be guaranteed
+
+### API usage
+
+#### Fluent API (recommended)
+
+```java
+// Simple toggle
+StructurePlacement.of(dungeon)
+    .at(x, z)
+    .atY(32)
+    .withInteriorAirFill()   // enables FILL_AIR mode
+    .place(world);
+
+// Explicit mode setting
+StructurePlacement.of(piece)
+    .at(x, z)
+    .onSurface()
+    .withInteriorFillMode(InteriorFillMode.FILL_AIR)
+    .place(world);
+```
+
+#### Bridge API
+
+```java
+// With all options
+StructureLoaderBridge.placeStructure(
+    world, piece, origin,
+    BlockRotation.NONE,
+    ChunkGenerationMode.QUEUE,
+    InteriorFillMode.FILL_AIR
+);
+
+// Without rotation
+StructureLoaderBridge.placeStructure(
+    world, piece, origin,
+    ChunkGenerationMode.QUEUE,
+    InteriorFillMode.FILL_AIR
+);
+```
+
+#### Direct loader API
+
+```java
+IStructureLoader loader = StructureLoaderBridge.getLoader();
+loader.place(world, piece, origin, BlockRotation.NONE, InteriorFillMode.FILL_AIR);
+```
+
+### Combining with StructureTerrain
+
+`StructureTerrain` blocks always indicate "preserve world terrain here" regardless of interior fill mode. This means you can:
+
+1. Use `FILL_AIR` to clear interiors
+2. Place `StructureTerrain` blocks under floors or at terrain entry points
+3. Get clean interiors while still blending structure edges with the world
 
 ---
 
@@ -1055,6 +1160,8 @@ That receiver:
 | `StructureLoaderBridge.spawnMultiStructAt(world, bundle, origin, depth, seed, chunkMode)` | with chunk mode control |
 | `StructureLoaderBridge.placeStructure(world, piece, origin, rotation, chunkMode)` | single structure with chunk mode |
 | `StructureLoaderBridge.placeStructure(world, piece, origin, chunkMode)` | convenience overload (no rotation) |
+| `StructureLoaderBridge.placeStructure(world, piece, origin, rotation, chunkMode, interiorMode)` | with interior fill mode |
+| `StructureLoaderBridge.placeStructure(world, piece, origin, chunkMode, interiorMode)` | convenience overload (no rotation) |
 | `StructureLoaderBridge.ensureChunksGenerated(world, min, max)` | prepare chunks by block bounds |
 | `StructureLoaderBridge.ensureChunksGenerated(world, center, radius)` | prepare chunks by radius |
 | `StructureLoaderBridge.queueStructure(...)` | pre-queue a standalone structure for later chunk availability |
@@ -1079,6 +1186,7 @@ That receiver:
 | `ConnectionPoint` | connector position + facing |
 | `PieceRole` | `ANCHOR`, `ROOM`, `HALLWAY`, `PATH` |
 | `ChunkGenerationMode` | `QUEUE` (default) or `FORCE_GENERATE` |
+| `InteriorFillMode` | `SKIP_AIR` (default) or `FILL_AIR` |
 | `StructureQueue` | persistent per-world block queue |
 | `PendingPlacement` | one deferred block or update-only trigger |
 | `LootTableRef` | TsaphLoot or vanilla loot reference |
@@ -1100,5 +1208,6 @@ That receiver:
 - Use `StructureQueue` only for low-level per-block deferred placement behavior.
 - If you need exact Y control for a multi-structure, use `spawnMultiStructAt(...)`, not `spawnMultiStruct(...)`.
 - Use `ChunkGenerationMode.FORCE_GENERATE` when you need the structure to exist immediately (e.g., teleport destinations).
+- Use `InteriorFillMode.FILL_AIR` or `.withInteriorAirFill()` for enclosed structures (dungeons, houses) to prevent terrain bleeding into interiors.
 - Use `TsaphGenConfig` and `TsaphGenRegistry` for flexible worldgen definitions that can target multiple dimensions.
 - Use `TsaphLootBuilder` to construct loot tables programmatically instead of writing JSON.

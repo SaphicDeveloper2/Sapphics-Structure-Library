@@ -64,6 +64,22 @@ public interface IStructureLoader {
     }
 
     /**
+     * Place a loaded structure piece with rotation and interior fill control.
+     *
+     * <p>When {@code interiorMode} is {@link InteriorFillMode#FILL_AIR}, air blocks
+     * in the structure definition are explicitly placed, clearing any terrain that
+     * would otherwise intrude into the structure's interior.
+     *
+     * @param world        Target server world.
+     * @param piece        Structure to place.
+     * @param origin       World-space position of the (rotated) bounding-box minimum corner.
+     * @param rotation     Clockwise rotation to apply.
+     * @param interiorMode How to handle air blocks in the structure definition.
+     */
+    void place(ServerWorld world, StructurePiece piece, BlockPos origin,
+               BlockRotation rotation, InteriorFillMode interiorMode);
+
+    /**
      * Process all pending placements for the chunk at {@code chunkX, chunkZ}
      * in the given world.  Called automatically by the Mixin pipeline on chunk load.
      *

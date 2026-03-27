@@ -222,11 +222,7 @@ public final class StructureLoaderBridge {
                                       BlockPos origin,
                                       BlockRotation rotation,
                                       ChunkGenerationMode chunkMode) {
-        ChunkGenerationMode mode = chunkMode == null ? ChunkGenerationMode.QUEUE : chunkMode;
-        if (mode == ChunkGenerationMode.FORCE_GENERATE) {
-            ForcedChunkGenerator.ensureStructureArea(world, piece, origin, rotation);
-        }
-        getLoader().place(world, piece, origin, rotation);
+        placeStructure(world, piece, origin, rotation, chunkMode, InteriorFillMode.SKIP_AIR);
     }
 
     /** Convenience overload using {@link BlockRotation#NONE}. */
@@ -234,7 +230,45 @@ public final class StructureLoaderBridge {
                                       StructurePiece piece,
                                       BlockPos origin,
                                       ChunkGenerationMode chunkMode) {
-        placeStructure(world, piece, origin, BlockRotation.NONE, chunkMode);
+        placeStructure(world, piece, origin, BlockRotation.NONE, chunkMode, InteriorFillMode.SKIP_AIR);
+    }
+
+    /**
+     * Place a standalone structure with explicit control over chunk handling and
+     * interior air filling.
+     *
+     * <p>When {@code interiorMode} is {@link InteriorFillMode#FILL_AIR}, air blocks
+     * in the structure definition are explicitly placed, clearing any terrain that
+     * would otherwise bleed into the structure's interior.
+     *
+     * @param world        Target server world.
+     * @param piece        Structure to place.
+     * @param origin       World-space position of the bounding-box minimum corner.
+     * @param rotation     Clockwise rotation to apply.
+     * @param chunkMode    How to handle unloaded chunks.
+     * @param interiorMode How to handle air blocks (interior clearing).
+     */
+    public static void placeStructure(ServerWorld world,
+                                      StructurePiece piece,
+                                      BlockPos origin,
+                                      BlockRotation rotation,
+                                      ChunkGenerationMode chunkMode,
+                                      InteriorFillMode interiorMode) {
+        ChunkGenerationMode cMode = chunkMode == null ? ChunkGenerationMode.QUEUE : chunkMode;
+        InteriorFillMode iMode = interiorMode == null ? InteriorFillMode.SKIP_AIR : interiorMode;
+        if (cMode == ChunkGenerationMode.FORCE_GENERATE) {
+            ForcedChunkGenerator.ensureStructureArea(world, piece, origin, rotation);
+        }
+        getLoader().place(world, piece, origin, rotation, iMode);
+    }
+
+    /** Convenience overload with interior mode but default rotation. */
+    public static void placeStructure(ServerWorld world,
+                                      StructurePiece piece,
+                                      BlockPos origin,
+                                      ChunkGenerationMode chunkMode,
+                                      InteriorFillMode interiorMode) {
+        placeStructure(world, piece, origin, BlockRotation.NONE, chunkMode, interiorMode);
     }
 
     /**

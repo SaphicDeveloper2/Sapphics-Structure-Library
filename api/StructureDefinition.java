@@ -1,14 +1,15 @@
 package com.sapphic.ssl.api;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 /**
  * A datapack-driven structure placement definition.
@@ -89,6 +90,9 @@ public final class StructureDefinition {
     /** Per-definition seed modifier. */
     private final long salt;
 
+    /** Interior fill mode — how air blocks inside structures are handled. */
+    private final InteriorFillMode interiorFill;
+
     // ── Y strategy ────────────────────────────────────────────────────────
 
     /** How the engine determines the Y coordinate when placing this structure. */
@@ -132,14 +136,16 @@ public final class StructureDefinition {
 
     private StructureDefinition(String id, String dimension, List<String> biomes,
                                 YPlacement yPlacement, int yOffset,
-                                float frequency, long salt) {
-        this.id         = Objects.requireNonNull(id,         "id");
-        this.dimension  = Objects.requireNonNull(dimension,  "dimension");
-        this.biomes     = Collections.unmodifiableList(biomes);
-        this.yPlacement = Objects.requireNonNull(yPlacement, "yPlacement");
-        this.yOffset    = yOffset;
-        this.frequency  = frequency;
-        this.salt       = salt;
+                                float frequency, long salt,
+                                InteriorFillMode interiorFill) {
+        this.id           = Objects.requireNonNull(id,         "id");
+        this.dimension    = Objects.requireNonNull(dimension,  "dimension");
+        this.biomes       = Collections.unmodifiableList(biomes);
+        this.yPlacement   = Objects.requireNonNull(yPlacement, "yPlacement");
+        this.yOffset      = yOffset;
+        this.frequency    = frequency;
+        this.salt         = salt;
+        this.interiorFill = Objects.requireNonNull(interiorFill, "interiorFill");
     }
 
     // ── Accessors ─────────────────────────────────────────────────────────
@@ -152,6 +158,13 @@ public final class StructureDefinition {
     public int          yOffset()     { return yOffset; }
     public float        frequency()   { return frequency; }
     public long         salt()        { return salt; }
+
+    /**
+     * How air blocks inside the structure are handled during placement.
+     *
+     * @return the interior fill mode (default: {@link InteriorFillMode#SKIP_AIR})
+     */
+    public InteriorFillMode interiorFill() { return interiorFill; }
 
     /**
      * {@code true} if this definition targets any dimension (wildcard {@code "*"}).
@@ -195,12 +208,25 @@ public final class StructureDefinition {
         float frequency = root.has("frequency")   ? root.get("frequency").getAsFloat()  : 0.005f;
         long  salt      = root.has("salt")        ? root.get("salt").getAsLong()        : 0L;
 
-        return new StructureDefinition(id, dimension, biomes, yPlacement, yOffset, frequency, salt);
+        InteriorFillMode interiorFill = InteriorFillMode.SKIP_AIR;
+        if (root.has("interior_fill")) {
+            String ifValue = root.get("interior_fill").getAsString().toLowerCase(Locale.ROOT);
+            interiorFill = switch (ifValue) {
+                case "fill_air" -> InteriorFillMode.FILL_AIR;
+                case "skip_air" -> InteriorFillMode.SKIP_AIR;
+                default -> throw new IllegalArgumentException(
+                        "Unknown interior_fill value: '" + ifValue +
+                        "'. Expected: skip_air | fill_air");
+            };
+        }
+
+        return new StructureDefinition(id, dimension, biomes, yPlacement, yOffset, frequency, salt, interiorFill);
     }
 
     @Override
     public String toString() {
         return "StructureDefinition[" + id + " dim=" + dimension
-               + " freq=" + frequency + " y=" + yPlacement + "+" + yOffset + "]";
+               + " freq=" + frequency + " y=" + yPlacement + "+" + yOffset
+               + " interior=" + interiorFill.name().toLowerCase(Locale.ROOT) + "]";
     }
 }

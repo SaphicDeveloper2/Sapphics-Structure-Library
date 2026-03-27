@@ -1,17 +1,18 @@
 package com.sapphic.ssl.api;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-
 import java.io.Reader;
 import java.io.Writer;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 
 /**
  * A {@code .tsaphgen} worldgen configuration file.
@@ -111,20 +112,24 @@ public final class TsaphGenConfig {
     /** Per-config seed modifier. */
     private final long salt;
 
+    /** Interior fill mode — how air blocks inside structures are handled. */
+    private final InteriorFillMode interiorFill;
+
     // ── Constructor ───────────────────────────────────────────────────────
 
     private TsaphGenConfig(String id, String structure, float weight,
                            List<String> dimensions, List<String> biomes,
                            StructureDefinition.YPlacement yPlacement,
-                           int yOffset, long salt) {
-        this.id         = Objects.requireNonNull(id, "id");
-        this.structure  = structure;
-        this.weight     = Math.max(0f, Math.min(1f, weight));
-        this.dimensions = Collections.unmodifiableList(dimensions);
-        this.biomes     = Collections.unmodifiableList(biomes);
-        this.yPlacement = Objects.requireNonNull(yPlacement, "yPlacement");
-        this.yOffset    = yOffset;
-        this.salt       = salt;
+                           int yOffset, long salt, InteriorFillMode interiorFill) {
+        this.id           = Objects.requireNonNull(id, "id");
+        this.structure    = structure;
+        this.weight       = Math.max(0f, Math.min(1f, weight));
+        this.dimensions   = Collections.unmodifiableList(dimensions);
+        this.biomes       = Collections.unmodifiableList(biomes);
+        this.yPlacement   = Objects.requireNonNull(yPlacement, "yPlacement");
+        this.yOffset      = yOffset;
+        this.salt         = salt;
+        this.interiorFill = Objects.requireNonNull(interiorFill, "interiorFill");
     }
 
     // ── Accessors ─────────────────────────────────────────────────────────
@@ -155,6 +160,13 @@ public final class TsaphGenConfig {
 
     /** Per-config seed modifier. */
     public long         salt()        { return salt; }
+
+    /**
+     * How air blocks inside the structure are handled during placement.
+     *
+     * @return the interior fill mode (default: {@link InteriorFillMode#SKIP_AIR})
+     */
+    public InteriorFillMode interiorFill() { return interiorFill; }
 
     // ── Derived helpers ───────────────────────────────────────────────────
 
@@ -231,8 +243,20 @@ public final class TsaphGenConfig {
         int  yOffset = root.has("y_offset") ? root.get("y_offset").getAsInt()  : 0;
         long salt    = root.has("salt")      ? root.get("salt").getAsLong()     : 0L;
 
+        InteriorFillMode interiorFill = InteriorFillMode.SKIP_AIR;
+        if (root.has("interior_fill")) {
+            String ifValue = root.get("interior_fill").getAsString().toLowerCase(Locale.ROOT);
+            interiorFill = switch (ifValue) {
+                case "fill_air" -> InteriorFillMode.FILL_AIR;
+                case "skip_air" -> InteriorFillMode.SKIP_AIR;
+                default -> throw new IllegalArgumentException(
+                        "Unknown interior_fill value: '" + ifValue +
+                        "'. Expected: skip_air | fill_air");
+            };
+        }
+
         return new TsaphGenConfig(id, structure, weight, dimensions, biomes,
-                                  yPlacement, yOffset, salt);
+                                  yPlacement, yOffset, salt, interiorFill);
     }
 
     // ── JSON serialisation ────────────────────────────────────────────────
@@ -260,6 +284,7 @@ public final class TsaphGenConfig {
         obj.addProperty("y_placement", yPlacement.name().toLowerCase());
         obj.addProperty("y_offset",    yOffset);
         obj.addProperty("salt",        salt);
+        obj.addProperty("interior_fill", interiorFill.name().toLowerCase(Locale.ROOT));
 
         return obj;
     }
@@ -301,6 +326,7 @@ public final class TsaphGenConfig {
         private StructureDefinition.YPlacement yPlacement = StructureDefinition.YPlacement.SURFACE;
         private int          yOffset    = 0;
         private long         salt       = 0L;
+        private InteriorFillMode interiorFill = InteriorFillMode.SKIP_AIR;
 
         /**
          * @param id Fully-qualified config id, e.g. {@code "mymod:myvillage"}.
@@ -369,11 +395,22 @@ public final class TsaphGenConfig {
             return this;
         }
 
+        /**
+         * Set how air blocks inside the structure are handled during placement.
+         *
+         * <p>Use {@link InteriorFillMode#FILL_AIR} to prevent terrain from bleeding
+         * into enclosed interiors. Default: {@link InteriorFillMode#SKIP_AIR}.
+         */
+        public Builder interiorFill(InteriorFillMode mode) {
+            this.interiorFill = Objects.requireNonNull(mode, "interiorFill");
+            return this;
+        }
+
         /** Build the {@link TsaphGenConfig}. */
         public TsaphGenConfig build() {
             return new TsaphGenConfig(id, structure, weight,
                     new ArrayList<>(dimensions), new ArrayList<>(biomes),
-                    yPlacement, yOffset, salt);
+                    yPlacement, yOffset, salt, interiorFill);
         }
     }
 
@@ -385,6 +422,7 @@ public final class TsaphGenConfig {
                + " struct=" + (structure != null ? structure : "<paired>")
                + " w=" + weight
                + " dims=" + dimensions
-               + " y=" + yPlacement + "+" + yOffset + "]";
+               + " y=" + yPlacement + "+" + yOffset
+               + " interior=" + interiorFill.name().toLowerCase(Locale.ROOT) + "]";
     }
 }

@@ -69,6 +69,7 @@ public final class StructurePlacement {
     private int       yOffset       = 0;
     private boolean   groundOffset  = true;   // apply piece.groundOffset() by default
     private ChunkGenerationMode chunkGenerationMode = ChunkGenerationMode.QUEUE;
+    private InteriorFillMode    interiorFillMode    = InteriorFillMode.SKIP_AIR;
 
     // ── Y strategies ─────────────────────────────────────────────────────
 
@@ -187,6 +188,45 @@ public final class StructurePlacement {
         return this;
     }
 
+    /**
+     * Enable interior air fill mode for this placement.
+     *
+     * <p>When enabled, air blocks in the structure definition are explicitly placed,
+     * clearing any terrain that would otherwise "bleed through" into the structure's
+     * interior.  This is essential for enclosed structures (dungeons, houses, bunkers)
+     * that must have clean interior spaces.
+     *
+     * <p>By default, air is skipped for efficiency — enable this only when interior
+     * clearing is actually needed.
+     *
+     * <p>Note: {@code StructureTerrain} blocks are always respected — they indicate
+     * "preserve world terrain here" and are never replaced with air.
+     *
+     * <pre>
+     *   StructurePlacement.of(dungeon)
+     *       .at(x, z)
+     *       .atY(32)
+     *       .withInteriorAirFill()   // clear terrain inside rooms
+     *       .place(world);
+     * </pre>
+     */
+    public StructurePlacement withInteriorAirFill() {
+        this.interiorFillMode = InteriorFillMode.FILL_AIR;
+        return this;
+    }
+
+    /**
+     * Set the interior fill mode for this placement.
+     *
+     * <p>Defaults to {@link InteriorFillMode#SKIP_AIR}.
+     *
+     * @see #withInteriorAirFill()
+     */
+    public StructurePlacement withInteriorFillMode(InteriorFillMode mode) {
+        this.interiorFillMode = mode == null ? InteriorFillMode.SKIP_AIR : mode;
+        return this;
+    }
+
     // ── Terminal ──────────────────────────────────────────────────────────
 
     /**
@@ -208,7 +248,8 @@ public final class StructurePlacement {
 
         int offset = groundOffset ? piece.groundOffset() : 0;
         BlockPos origin = new BlockPos(x, finalY - offset + yOffset, z);
-        StructureLoaderBridge.placeStructure(world, piece, origin, chunkGenerationMode);
+        StructureLoaderBridge.placeStructure(
+                world, piece, origin, chunkGenerationMode, interiorFillMode);
     }
 
     // ── Accessors (for inspection / testing) ─────────────────────────────

@@ -115,12 +115,19 @@ public final class TsaphGenConfig {
     /** Interior fill mode — how air blocks inside structures are handled. */
     private final InteriorFillMode interiorFill;
 
+    /** Boss entity configuration. */
+    private final BossSpawnConfig boss;
+
+    /** Maximum times this structure can generate per world (-1 = unlimited). */
+    private final int maxCount;
+
     // ── Constructor ───────────────────────────────────────────────────────
 
     private TsaphGenConfig(String id, String structure, float weight,
                            List<String> dimensions, List<String> biomes,
                            StructureDefinition.YPlacement yPlacement,
-                           int yOffset, long salt, InteriorFillMode interiorFill) {
+                           int yOffset, long salt, InteriorFillMode interiorFill,
+                           BossSpawnConfig boss, int maxCount) {
         this.id           = Objects.requireNonNull(id, "id");
         this.structure    = structure;
         this.weight       = Math.max(0f, Math.min(1f, weight));
@@ -130,6 +137,8 @@ public final class TsaphGenConfig {
         this.yOffset      = yOffset;
         this.salt         = salt;
         this.interiorFill = Objects.requireNonNull(interiorFill, "interiorFill");
+        this.boss         = Objects.requireNonNull(boss, "boss");
+        this.maxCount     = maxCount;
     }
 
     // ── Accessors ─────────────────────────────────────────────────────────
@@ -167,6 +176,25 @@ public final class TsaphGenConfig {
      * @return the interior fill mode (default: {@link InteriorFillMode#SKIP_AIR})
      */
     public InteriorFillMode interiorFill() { return interiorFill; }
+
+    /**
+     * Boss entity configuration.
+     *
+     * @return the boss config, or {@link BossSpawnConfig#NONE} if no boss.
+     */
+    public BossSpawnConfig boss() { return boss; }
+
+    /**
+     * Maximum times this structure can generate per world.
+     *
+     * @return max count, or -1 for unlimited.
+     */
+    public int maxCount() { return maxCount; }
+
+    /**
+     * {@code true} if this structure has a generation limit.
+     */
+    public boolean hasMaxCount() { return maxCount >= 0; }
 
     // ── Derived helpers ───────────────────────────────────────────────────
 
@@ -255,8 +283,14 @@ public final class TsaphGenConfig {
             };
         }
 
+        BossSpawnConfig boss = root.has("boss")
+                ? BossSpawnConfig.fromJson(root.getAsJsonObject("boss"))
+                : BossSpawnConfig.NONE;
+
+        int maxCount = root.has("max_count") ? root.get("max_count").getAsInt() : -1;
+
         return new TsaphGenConfig(id, structure, weight, dimensions, biomes,
-                                  yPlacement, yOffset, salt, interiorFill);
+                                  yPlacement, yOffset, salt, interiorFill, boss, maxCount);
     }
 
     // ── JSON serialisation ────────────────────────────────────────────────
@@ -285,6 +319,8 @@ public final class TsaphGenConfig {
         obj.addProperty("y_offset",    yOffset);
         obj.addProperty("salt",        salt);
         obj.addProperty("interior_fill", interiorFill.name().toLowerCase(Locale.ROOT));
+        if (maxCount >= 0) obj.addProperty("max_count", maxCount);
+        if (boss.hasBoss()) obj.add("boss", boss.toJson());
 
         return obj;
     }
@@ -327,6 +363,8 @@ public final class TsaphGenConfig {
         private int          yOffset    = 0;
         private long         salt       = 0L;
         private InteriorFillMode interiorFill = InteriorFillMode.SKIP_AIR;
+        private BossSpawnConfig boss = BossSpawnConfig.NONE;
+        private int          maxCount   = -1;
 
         /**
          * @param id Fully-qualified config id, e.g. {@code "mymod:myvillage"}.
@@ -406,11 +444,42 @@ public final class TsaphGenConfig {
             return this;
         }
 
+        /**
+         * Set the boss entity to spawn when this structure loads.
+         *
+         * <p>The boss spawns only once per structure instance, tracked persistently.
+         */
+        public Builder boss(BossSpawnConfig boss) {
+            this.boss = Objects.requireNonNull(boss, "boss");
+            return this;
+        }
+
+        /**
+         * Set maximum times this structure can generate per world.
+         *
+         * <p>Use for unique structures like boss lairs or special dungeons
+         * that should only appear once (or limited times) per world.
+         *
+         * @param max Maximum count, or -1 for unlimited (default).
+         */
+        public Builder maxCount(int max) {
+            this.maxCount = max;
+            return this;
+        }
+
+        /**
+         * Convenience method: limit to exactly one instance per world.
+         * Equivalent to {@code maxCount(1)}.
+         */
+        public Builder unique() {
+            return maxCount(1);
+        }
+
         /** Build the {@link TsaphGenConfig}. */
         public TsaphGenConfig build() {
             return new TsaphGenConfig(id, structure, weight,
                     new ArrayList<>(dimensions), new ArrayList<>(biomes),
-                    yPlacement, yOffset, salt, interiorFill);
+                    yPlacement, yOffset, salt, interiorFill, boss, maxCount);
         }
     }
 
@@ -423,6 +492,8 @@ public final class TsaphGenConfig {
                + " w=" + weight
                + " dims=" + dimensions
                + " y=" + yPlacement + "+" + yOffset
-               + " interior=" + interiorFill.name().toLowerCase(Locale.ROOT) + "]";
+               + " interior=" + interiorFill.name().toLowerCase(Locale.ROOT)
+               + (boss.hasBoss() ? " boss=" + boss.entityType() : "")
+               + (maxCount >= 0 ? " max=" + maxCount : "") + "]";
     }
 }

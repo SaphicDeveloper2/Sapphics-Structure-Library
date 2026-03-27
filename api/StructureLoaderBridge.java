@@ -7,6 +7,7 @@ import com.sapphic.ssl.internal.DeferredGenerationQueue;
 import com.sapphic.ssl.internal.ForcedChunkGenerator;
 import com.sapphic.ssl.internal.StructureDefinitionRegistry;
 import com.sapphic.ssl.internal.StructureLoaderImpl;
+import com.sapphic.ssl.internal.StructureTracker;
 import com.sapphic.ssl.internal.WandSession;
 import com.sapphic.ssl.internal.WandSessionManager;
 import com.sapphic.ssl.internal.TsaphMultiStructReader;
@@ -125,6 +126,15 @@ public final class StructureLoaderBridge {
      */
     public static void processChunkDefinitions(ServerWorld world, ChunkPos pos) {
         StructureDefinitionRegistry.processChunk(world, pos);
+    }
+
+    /**
+     * Process pending boss spawns for the loaded chunk at {@code pos}.
+     * Called alongside {@link #processChunkQueue} to spawn bosses whose
+     * target location is now loaded.
+     */
+    public static void processBossSpawns(ServerWorld world, ChunkPos pos) {
+        StructureTracker.get(world).processPendingBosses(pos.x, pos.z);
     }
 
     /**

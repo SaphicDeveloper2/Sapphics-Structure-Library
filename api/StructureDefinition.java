@@ -93,6 +93,15 @@ public final class StructureDefinition {
     /** Interior fill mode — how air blocks inside structures are handled. */
     private final InteriorFillMode interiorFill;
 
+    /** Boss entity configuration, or {@link BossSpawnConfig#NONE} if no boss. */
+    private final BossSpawnConfig boss;
+
+    /**
+     * Maximum number of times this structure can generate per world.
+     * -1 means unlimited (default).
+     */
+    private final int maxCount;
+
     // ── Y strategy ────────────────────────────────────────────────────────
 
     /** How the engine determines the Y coordinate when placing this structure. */
@@ -137,7 +146,8 @@ public final class StructureDefinition {
     private StructureDefinition(String id, String dimension, List<String> biomes,
                                 YPlacement yPlacement, int yOffset,
                                 float frequency, long salt,
-                                InteriorFillMode interiorFill) {
+                                InteriorFillMode interiorFill,
+                                BossSpawnConfig boss, int maxCount) {
         this.id           = Objects.requireNonNull(id,         "id");
         this.dimension    = Objects.requireNonNull(dimension,  "dimension");
         this.biomes       = Collections.unmodifiableList(biomes);
@@ -146,6 +156,8 @@ public final class StructureDefinition {
         this.frequency    = frequency;
         this.salt         = salt;
         this.interiorFill = Objects.requireNonNull(interiorFill, "interiorFill");
+        this.boss         = Objects.requireNonNull(boss, "boss");
+        this.maxCount     = maxCount;
     }
 
     // ── Accessors ─────────────────────────────────────────────────────────
@@ -165,6 +177,25 @@ public final class StructureDefinition {
      * @return the interior fill mode (default: {@link InteriorFillMode#SKIP_AIR})
      */
     public InteriorFillMode interiorFill() { return interiorFill; }
+
+    /**
+     * Boss entity configuration.
+     *
+     * @return the boss config, or {@link BossSpawnConfig#NONE} if no boss.
+     */
+    public BossSpawnConfig boss() { return boss; }
+
+    /**
+     * Maximum times this structure can generate per world.
+     *
+     * @return max count, or -1 for unlimited.
+     */
+    public int maxCount() { return maxCount; }
+
+    /**
+     * {@code true} if this structure has a generation limit.
+     */
+    public boolean hasMaxCount() { return maxCount >= 0; }
 
     /**
      * {@code true} if this definition targets any dimension (wildcard {@code "*"}).
@@ -220,13 +251,22 @@ public final class StructureDefinition {
             };
         }
 
-        return new StructureDefinition(id, dimension, biomes, yPlacement, yOffset, frequency, salt, interiorFill);
+        BossSpawnConfig boss = root.has("boss")
+                ? BossSpawnConfig.fromJson(root.getAsJsonObject("boss"))
+                : BossSpawnConfig.NONE;
+
+        int maxCount = root.has("max_count") ? root.get("max_count").getAsInt() : -1;
+
+        return new StructureDefinition(id, dimension, biomes, yPlacement, yOffset, frequency, salt,
+                                       interiorFill, boss, maxCount);
     }
 
     @Override
     public String toString() {
         return "StructureDefinition[" + id + " dim=" + dimension
                + " freq=" + frequency + " y=" + yPlacement + "+" + yOffset
-               + " interior=" + interiorFill.name().toLowerCase(Locale.ROOT) + "]";
+               + " interior=" + interiorFill.name().toLowerCase(Locale.ROOT)
+               + (boss.hasBoss() ? " boss=" + boss.entityType() : "")
+               + (maxCount >= 0 ? " max=" + maxCount : "") + "]";
     }
 }

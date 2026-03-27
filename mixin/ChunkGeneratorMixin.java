@@ -67,5 +67,6 @@ public abstract class ChunkGeneratorMixin {
         StructureLoaderBridge.processQueuedGenerations(serverWorld, pos);
         StructureLoaderBridge.processChunkQueue(serverWorld, pos);
         StructureLoaderBridge.processChunkDefinitions(serverWorld, pos);
+        StructureLoaderBridge.processBossSpawns(serverWorld, pos);
     }
 }

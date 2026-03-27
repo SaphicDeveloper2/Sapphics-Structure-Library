@@ -11,6 +11,7 @@ import com.sapphic.ssl.api.loot.LootBarrelScreenHandler;
 import com.sapphic.ssl.command.TsaphCommand;
 import com.sapphic.ssl.compat.McVersion;
 import com.sapphic.ssl.compat.SslCompat;
+import com.sapphic.ssl.internal.StructureTracker;
 import com.sapphic.ssl.internal.loot.LootRegistry;
 import com.sapphic.ssl.items.SslBlocks;
 import com.sapphic.ssl.items.SslItems;
@@ -87,6 +88,7 @@ public class SapphicsStructureLibrary implements ModInitializer {
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             StructureLoaderBridge.onServerStopping();
             StructureLoaderBridge.endAllSessions();
+            StructureTracker.clearAll();  // save and clear all tracking data
         });
 
         // Drain the placement queue AND run definition-based placement whenever any
@@ -107,6 +109,7 @@ public class SapphicsStructureLibrary implements ModInitializer {
             StructureLoaderBridge.processQueuedGenerations(world, chunk.getPos());
             StructureLoaderBridge.processChunkQueue(world, chunk.getPos());
             StructureLoaderBridge.processChunkDefinitions(world, chunk.getPos());
+            StructureLoaderBridge.processBossSpawns(world, chunk.getPos());
         });
 
         // Version detection runs in McVersion static block — log the result here

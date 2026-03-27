@@ -98,6 +98,13 @@ Older SSL documentation is now outdated in several important ways. The current c
   - `SKIP_AIR` — default, air blocks skipped (terrain can bleed into interiors)
   - `FILL_AIR` — air blocks placed explicitly (clears terrain from interiors)
 - **`StructurePlacement.withInteriorAirFill()` in the fluent API.**
+- **Boss entity support for structures.**
+  - `BossSpawnConfig` class for defining boss entities to spawn.
+  - Bosses spawn only once per structure instance when the room loads.
+  - Configurable via Java API or datapack JSON (`"boss"` field).
+- **`max_count` field for unique/limited structures.**
+  - Limit how many times a structure can generate per world.
+  - Use `maxCount(1)` or `.unique()` for one-of-a-kind boss lairs.
 
 ---
 
@@ -807,6 +814,150 @@ loader.place(world, piece, origin, BlockRotation.NONE, InteriorFillMode.FILL_AIR
 
 ---
 
+## Boss entity support
+
+SSL supports automatic boss entity spawning when structure rooms load. This allows modpack creators to tag dungeons or boss lairs with specific entities that spawn only once per structure instance.
+
+### How it works
+
+1. A structure definition specifies a boss entity configuration.
+2. When the structure is placed, the boss spawn is queued.
+3. When the chunk containing the boss spawn position loads, the entity is spawned.
+4. The spawn is tracked persistently — the boss will never spawn again for that structure instance, even after server restarts.
+
+### JSON configuration
+
+Add a `"boss"` object to your structure definition or `.tsaphgen` file:
+
+```json
+{
+  "boss": {
+    "entity":    "minecraft:warden",
+    "offset_x":  0,
+    "offset_y":  1,
+    "offset_z":  0,
+    "nbt": {
+      "CustomName": "{\"text\":\"Dungeon Guardian\"}"
+    }
+  }
+}
+```
+
+#### Boss fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `entity` | string | (required) | Namespaced entity type id, e.g. `"minecraft:warden"` or `"mymod:custom_boss"`. |
+| `offset_x` | int | `0` | X offset from structure center. |
+| `offset_y` | int | `1` | Y offset from structure floor (usually 1 to avoid spawning inside ground). |
+| `offset_z` | int | `0` | Z offset from structure center. |
+| `nbt` | object | (none) | Optional NBT to merge into spawned entity (CustomName, attributes, etc.). |
+
+### Java API
+
+Use `BossSpawnConfig.Builder` for programmatic boss configuration:
+
+```java
+// Simple boss
+BossSpawnConfig boss = new BossSpawnConfig.Builder("minecraft:warden")
+    .offset(0, 1, 0)
+    .build();
+
+// Boss with custom NBT
+NbtCompound nbt = new NbtCompound();
+nbt.putString("CustomName", "{\"text\":\"Ancient Guardian\"}");
+
+BossSpawnConfig customBoss = new BossSpawnConfig.Builder("minecraft:elder_guardian")
+    .offset(5, 2, 5)
+    .withNbt(nbt)
+    .build();
+
+// Use with TsaphGenConfig
+TsaphGenRegistry.register(
+    new TsaphGenConfig.Builder("mymod:boss_dungeon")
+        .structure("mymod:boss_dungeon")
+        .weight(0.001f)
+        .unique()  // only one per world
+        .boss(boss)
+        .build()
+);
+```
+
+### BossSpawnConfig methods
+
+| Method | Description |
+|---|---|
+| `Builder(entityType)` | Create a builder with the entity type id. |
+| `offset(x, y, z)` | Set spawn offset from structure center. |
+| `offsetX(int)`, `offsetY(int)`, `offsetZ(int)` | Set individual offset components. |
+| `withNbt(NbtCompound)` | Set NBT to merge into spawned entity. |
+| `build()` | Build the `BossSpawnConfig`. |
+
+### Tracking and persistence
+
+Boss spawns are tracked per structure instance using a world-persistent tracker:
+
+- **Key format:** `{configId}@{originX},{originY},{originZ}`
+- **Storage location:** `<world>/data/ssl_tracking/tracking.dat`
+- **Survives:** Server restarts, world reloads
+
+This ensures each unique structure instance can only spawn its boss once.
+
+---
+
+## Unique/limited structures
+
+SSL supports limiting how many times a structure can generate per world. This is useful for:
+
+- **Boss lairs** — only one final boss dungeon per world
+- **Unique landmarks** — a single ancient temple
+- **Progressive discovery** — limited special structures that reward exploration
+
+### JSON configuration
+
+Add `"max_count"` to your structure definition or `.tsaphgen` file:
+
+```json
+{
+  "structure": "mymod:boss_lair",
+  "weight": 0.001,
+  "max_count": 1
+}
+```
+
+### Java API
+
+```java
+// Limit to 3 instances per world
+TsaphGenRegistry.register(
+    new TsaphGenConfig.Builder("mymod:rare_temple")
+        .structure("mymod:rare_temple")
+        .weight(0.002f)
+        .maxCount(3)
+        .build()
+);
+
+// Single instance per world (convenience method)
+TsaphGenRegistry.register(
+    new TsaphGenConfig.Builder("mymod:unique_boss_lair")
+        .structure("mymod:unique_boss_lair")
+        .weight(0.001f)
+        .unique()  // equivalent to maxCount(1)
+        .boss(new BossSpawnConfig.Builder("minecraft:warden").build())
+        .build()
+);
+```
+
+### Count tracking
+
+Generation counts are tracked per world:
+
+- **Key:** config id (e.g. `"mymod:unique_boss_lair"`)
+- **Storage:** `<world>/data/ssl_tracking/tracking.dat`
+- **Check:** Before each potential generation, the engine verifies `count < maxCount`
+
+---
+
 ## TsaphGen worldgen system
 
 SSL provides a flexible worldgen configuration system through `.tsaphgen` files and the `TsaphGenRegistry` API.
@@ -833,7 +984,17 @@ data/<namespace>/ssl_worldgen/<name>.tsaphgen
   "y_placement": "surface",
   "y_offset":    0,
   "salt":        12345,
-  "interior_fill": "skip_air"
+  "interior_fill": "skip_air",
+  "max_count":   1,
+  "boss": {
+    "entity":    "minecraft:warden",
+    "offset_x":  0,
+    "offset_y":  1,
+    "offset_z":  0,
+    "nbt": {
+      "CustomName": "{\"text\":\"Dungeon Guardian\"}"
+    }
+  }
 }
 ```
 
@@ -849,6 +1010,8 @@ data/<namespace>/ssl_worldgen/<name>.tsaphgen
 | `y_offset` | int | `0` | Offset applied on top of the computed Y. |
 | `salt` | long | `0` | Per-config seed modifier. |
 | `interior_fill` | string | `"skip_air"` | How air blocks are handled: `"skip_air"` (terrain can bleed) or `"fill_air"` (clears interiors). |
+| `max_count` | int | `-1` | Maximum times this structure can generate per world. -1 = unlimited. |
+| `boss` | object | (none) | Boss entity configuration. See [Boss entity support](#boss-entity-support). |
 
 ### Programmatic registration
 
@@ -866,6 +1029,18 @@ TsaphGenRegistry.register(
         .interiorFill(InteriorFillMode.FILL_AIR)  // optional: clear interiors
         .build()
 );
+
+// Unique boss lair that generates only once per world
+TsaphGenRegistry.register(
+    new TsaphGenConfig.Builder("mymod:boss_lair")
+        .structure("mymod:boss_lair")
+        .weight(0.001f)
+        .unique()  // max_count = 1
+        .boss(new BossSpawnConfig.Builder("minecraft:warden")
+            .offset(0, 1, 0)
+            .build())
+        .build()
+);
 ```
 
 ### Builder methods
@@ -881,6 +1056,9 @@ TsaphGenRegistry.register(
 | `yOffset(int)` | Vertical offset on top of computed Y. |
 | `salt(long)` | Per-config seed modifier. |
 | `interiorFill(InteriorFillMode)` | How air blocks are handled (`SKIP_AIR` or `FILL_AIR`). |
+| `boss(BossSpawnConfig)` | Boss entity to spawn when the structure loads. |
+| `maxCount(int)` | Max times this structure can generate per world (-1 = unlimited). |
+| `unique()` | Convenience for `maxCount(1)` — one per world. |
 | `build()` | Finalize and return the `TsaphGenConfig`. |
 
 ### Registry API
